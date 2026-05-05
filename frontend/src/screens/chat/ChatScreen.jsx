@@ -15,52 +15,61 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
-
-const API_URL = 'https://api.gisc-liberia.com/api';
+import api from '../../services/api';
 
 const ChatScreen = ({ navigation }) => {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [counselor, setCounselor] = useState(null);
+  const [counselor, setCounselor] = useState({
+    name: 'Faith Isikwei',
+    title: 'Senior Counsellor',
+    studentsHelped: 150,
+  });
   const flatListRef = useRef(null);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   useEffect(() => {
-    loadCounselorInfo();
-    loadMessages();
+    loadInitialData();
   }, []);
+
+  const loadInitialData = async () => {
+    try {
+      await loadCounselorInfo();
+    } catch (error) {
+      // Use default counselor info
+    }
+    
+    try {
+      await loadMessages();
+    } catch (error) {
+      // Start with empty messages
+    }
+    
+    setLoading(false);
+    setDataLoaded(true);
+  };
 
   const loadCounselorInfo = async () => {
     try {
-      const token = await AsyncStorage.getItem('gisc_token');
-      const response = await axios.get(`${API_URL}/counselor/info`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.data.success) {
+      const response = await api.get('/counselor/info');
+      if (response.data?.success && response.data.counselor) {
         setCounselor(response.data.counselor);
       }
     } catch (error) {
-      console.error('Error loading counselor:', error);
+      // Silently use default counselor
     }
   };
 
   const loadMessages = async () => {
     try {
-      const token = await AsyncStorage.getItem('gisc_token');
-      const response = await axios.get(`${API_URL}/chat/messages`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.data.success) {
+      const response = await api.get('/chat/messages');
+      if (response.data?.success && response.data.messages) {
         setMessages(response.data.messages);
       }
     } catch (error) {
-      console.error('Error loading messages:', error);
-    } finally {
-      setLoading(false);
+      // Silently use empty messages array
     }
   };
 
@@ -69,7 +78,7 @@ const ChatScreen = ({ navigation }) => {
 
     const tempMessage = {
       id: `temp_${Date.now()}`,
-      text: inputText,
+      text: inputText.trim(),
       sender: 'user',
       timestamp: new Date().toISOString(),
       status: 'sending',
@@ -80,15 +89,9 @@ const ChatScreen = ({ navigation }) => {
     setSending(true);
 
     try {
-      const token = await AsyncStorage.getItem('gisc_token');
-      const response = await axios.post(
-        `${API_URL}/chat/send`,
-        { message: inputText },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await api.post('/chat/send', { message: inputText.trim() });
 
-      if (response.data.success) {
-        // Update temp message with server response
+      if (response.data?.success) {
         setMessages(prev => 
           prev.map(msg => 
             msg.id === tempMessage.id 
@@ -98,7 +101,6 @@ const ChatScreen = ({ navigation }) => {
         );
       }
     } catch (error) {
-      // Mark message as failed
       setMessages(prev => 
         prev.map(msg => 
           msg.id === tempMessage.id 
@@ -112,8 +114,9 @@ const ChatScreen = ({ navigation }) => {
   };
 
   const openWhatsApp = () => {
-    const phoneNumber = '+231880123456'; // GISC WhatsApp number
+    const phoneNumber = '+231880123456';
     const message = encodeURIComponent('Hello GISC, I need assistance with my study abroad application.');
+    
     Linking.openURL(`whatsapp://send?phone=${phoneNumber}&text=${message}`)
       .catch(() => {
         Alert.alert(
@@ -139,7 +142,7 @@ const ChatScreen = ({ navigation }) => {
           <View style={styles.avatarContainer}>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>
-                {counselor?.name?.charAt(0) || 'C'}
+                {counselor?.name?.charAt(0) || 'F'}
               </Text>
             </View>
           </View>
@@ -157,7 +160,7 @@ const ChatScreen = ({ navigation }) => {
           </Text>
           <View style={styles.messageFooter}>
             <Text style={styles.messageTime}>
-              {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
             </Text>
             {isUser && (
               <Ionicons 
@@ -183,14 +186,16 @@ const ChatScreen = ({ navigation }) => {
       <View style={styles.counselorCard}>
         <View style={styles.counselorAvatar}>
           <Text style={styles.counselorAvatarText}>
-            {counselor?.name?.charAt(0) || 'D'}
+            {counselor?.name?.charAt(0) || 'F'}
           </Text>
         </View>
         <View style={styles.counselorInfo}>
           <Text style={styles.counselorName}>
-            {counselor?.name || 'Damilola Folulana'}
+            {counselor?.name || 'Faith Isikwei'}
           </Text>
-          <Text style={styles.counselorTitle}>Your Dedicated Counselor</Text>
+          <Text style={styles.counselorTitle}>
+            {counselor?.title || 'Senior Counsellor'}
+          </Text>
           <Text style={styles.counselorStats}>
             🎓 Counseled {counselor?.studentsHelped || '150'}+ students in 4+ years
           </Text>
@@ -199,7 +204,7 @@ const ChatScreen = ({ navigation }) => {
 
       <View style={styles.welcomeMessage}>
         <Text style={styles.welcomeText}>
-          👋 Hey there! I'm {counselor?.name?.split(' ')[0] || 'Damilola'}, your dedicated counselor. 
+          👋 Hey there! I'm {counselor?.name?.split(' ')[0] || 'Faith'}, your dedicated counselor. 
           I've counseled over {counselor?.studentsHelped || '150'} students in the last 4 years, 
           and I'm excited to support you through your entire study-abroad journey.
         </Text>
@@ -215,28 +220,28 @@ const ChatScreen = ({ navigation }) => {
             style={styles.quickAction}
             onPress={() => setInputText('I need help with my application')}
           >
-            <Ionicons name="document-text-outline" size={20} color="#1E3A5F" />
+            <Text style={styles.quickActionIcon}>📄</Text>
             <Text style={styles.quickActionText}>Application Help</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.quickAction}
             onPress={() => setInputText('What are the visa requirements?')}
           >
-            <Ionicons name="airplane-outline" size={20} color="#1E3A5F" />
+            <Text style={styles.quickActionIcon}>✈️</Text>
             <Text style={styles.quickActionText}>Visa Questions</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.quickAction}
             onPress={() => setInputText('Tell me about scholarships')}
           >
-            <Ionicons name="cash-outline" size={20} color="#1E3A5F" />
+            <Text style={styles.quickActionIcon}>💰</Text>
             <Text style={styles.quickActionText}>Scholarships</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.quickAction}
             onPress={openWhatsApp}
           >
-            <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
+            <Text style={styles.quickActionIcon}>💬</Text>
             <Text style={[styles.quickActionText, { color: '#25D366' }]}>WhatsApp</Text>
           </TouchableOpacity>
         </View>
@@ -247,7 +252,7 @@ const ChatScreen = ({ navigation }) => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1E3A5F" />
+        <ActivityIndicator size="large" color="#cc2936" />
         <Text style={styles.loadingText}>Loading conversation...</Text>
       </View>
     );
@@ -261,12 +266,10 @@ const ChatScreen = ({ navigation }) => {
     >
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#1E3A5F" />
-        </TouchableOpacity>
+        <View style={{ width: 40 }} />
         <Text style={styles.headerTitle}>Support Chat</Text>
         <TouchableOpacity onPress={openWhatsApp}>
-          <Ionicons name="logo-whatsapp" size={24} color="#25D366" />
+          <Text style={styles.whatsappIcon}>💬</Text>
         </TouchableOpacity>
       </View>
 
@@ -278,22 +281,15 @@ const ChatScreen = ({ navigation }) => {
         keyExtractor={item => item.id}
         ListHeaderComponent={renderHeader}
         contentContainerStyle={styles.messagesList}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
+        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
       />
 
       {/* Input Bar */}
       <View style={styles.inputContainer}>
-        <TouchableOpacity 
-          style={styles.attachButton}
-          onPress={() => Alert.alert('Coming Soon', 'File attachment will be available soon!')}
-        >
-          <Ionicons name="add-circle-outline" size={26} color="#1E3A5F" />
-        </TouchableOpacity>
-        
         <TextInput
           style={styles.input}
-          placeholder="Type your message..."
-          placeholderTextColor="#8AA0B8"
+          placeholder="Write a message"
+          placeholderTextColor="#999999"
           value={inputText}
           onChangeText={setInputText}
           multiline
@@ -308,18 +304,17 @@ const ChatScreen = ({ navigation }) => {
           {sending ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
-            <Ionicons name="send" size={20} color="#FFFFFF" />
+            <Text style={styles.sendIcon}>➤</Text>
           )}
         </TouchableOpacity>
       </View>
 
       {/* WhatsApp Banner */}
       <TouchableOpacity style={styles.whatsappBanner} onPress={openWhatsApp}>
-        <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
+        <Text style={styles.whatsappBannerIcon}>💬</Text>
         <Text style={styles.whatsappBannerText}>
           Prefer WhatsApp? Click to chat with us directly
         </Text>
-        <Ionicons name="open-outline" size={16} color="#8AA0B8" />
       </TouchableOpacity>
     </KeyboardAvoidingView>
   );
@@ -328,18 +323,18 @@ const ChatScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#ffffff',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#ffffff',
   },
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#5A7D9C',
+    color: '#888888',
   },
   header: {
     flexDirection: 'row',
@@ -349,12 +344,16 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E8EEF5',
+    borderBottomColor: '#f0f0f0',
+    backgroundColor: '#ffffff',
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1E3A5F',
+    color: '#1a3a5c',
+  },
+  whatsappIcon: {
+    fontSize: 24,
   },
   messagesList: {
     paddingHorizontal: 16,
@@ -366,7 +365,7 @@ const styles = StyleSheet.create({
   counselorCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E3A5F',
+    backgroundColor: '#1a3a5c',
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
@@ -375,7 +374,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#A8D0E6',
+    backgroundColor: '#c0c0c0',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14,
@@ -383,7 +382,7 @@ const styles = StyleSheet.create({
   counselorAvatarText: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#1E3A5F',
+    color: '#1a3a5c',
   },
   counselorInfo: {
     flex: 1,
@@ -391,34 +390,34 @@ const styles = StyleSheet.create({
   counselorName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: '#ffffff',
     marginBottom: 2,
   },
   counselorTitle: {
     fontSize: 13,
-    color: '#A8D0E6',
+    color: '#c0c0c0',
     marginBottom: 4,
   },
   counselorStats: {
     fontSize: 12,
-    color: '#A8D0E6',
+    color: '#c0c0c0',
   },
   welcomeMessage: {
-    backgroundColor: '#F5F9FF',
+    backgroundColor: '#f5f5f5',
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
   },
   welcomeText: {
     fontSize: 14,
-    color: '#1E3A5F',
+    color: '#1a3a5c',
     lineHeight: 20,
     marginBottom: 8,
   },
   welcomeSubtext: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#1E3A5F',
+    color: '#1a3a5c',
   },
   quickActions: {
     marginBottom: 16,
@@ -426,7 +425,7 @@ const styles = StyleSheet.create({
   quickActionsTitle: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#5A7D9C',
+    color: '#888888',
     marginBottom: 12,
   },
   quickActionButtons: {
@@ -437,18 +436,22 @@ const styles = StyleSheet.create({
   quickAction: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FAFCFE',
+    backgroundColor: '#f5f5f5',
     borderWidth: 1,
-    borderColor: '#E8EEF5',
+    borderColor: '#e0e0e0',
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 10,
     margin: 4,
   },
+  quickActionIcon: {
+    fontSize: 16,
+    marginRight: 6,
+  },
   quickActionText: {
     fontSize: 13,
-    color: '#1E3A5F',
-    marginLeft: 8,
+    color: '#1a3a5c',
+    fontWeight: '500',
   },
   messageContainer: {
     flexDirection: 'row',
@@ -467,14 +470,14 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#1E3A5F',
+    backgroundColor: '#1a3a5c',
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#ffffff',
   },
   messageBubble: {
     maxWidth: '75%',
@@ -483,24 +486,24 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   userBubble: {
-    backgroundColor: '#1E3A5F',
+    backgroundColor: '#cc2936',
     borderBottomRightRadius: 4,
   },
   counselorBubble: {
-    backgroundColor: '#F5F9FF',
+    backgroundColor: '#f5f5f5',
     borderBottomLeftRadius: 4,
     borderWidth: 1,
-    borderColor: '#E8EEF5',
+    borderColor: '#e0e0e0',
   },
   messageText: {
     fontSize: 14,
     lineHeight: 20,
   },
   userMessageText: {
-    color: '#FFFFFF',
+    color: '#ffffff',
   },
   counselorMessageText: {
-    color: '#1E3A5F',
+    color: '#1a3a5c',
   },
   messageFooter: {
     flexDirection: 'row',
@@ -510,7 +513,7 @@ const styles = StyleSheet.create({
   },
   messageTime: {
     fontSize: 10,
-    color: '#8AA0B8',
+    color: '#c0c0c0',
     marginRight: 4,
   },
   messageStatus: {
@@ -522,49 +525,51 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: '#E8EEF5',
-    backgroundColor: '#FFFFFF',
-  },
-  attachButton: {
-    marginRight: 12,
-    paddingBottom: 4,
+    borderTopColor: '#f0f0f0',
+    backgroundColor: '#ffffff',
   },
   input: {
     flex: 1,
-    backgroundColor: '#F5F9FF',
+    backgroundColor: '#f5f5f5',
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
     maxHeight: 100,
     fontSize: 15,
-    color: '#1E3A5F',
+    color: '#1a3a5c',
   },
   sendButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#1E3A5F',
+    backgroundColor: '#cc2936',
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 12,
   },
   sendButtonDisabled: {
-    backgroundColor: '#8AA0B8',
+    backgroundColor: '#c0c0c0',
+  },
+  sendIcon: {
+    fontSize: 18,
+    color: '#ffffff',
   },
   whatsappBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
-    backgroundColor: '#F5F9FF',
+    backgroundColor: '#f5f5f5',
     borderTopWidth: 1,
-    borderTopColor: '#E8EEF5',
+    borderTopColor: '#f0f0f0',
+  },
+  whatsappBannerIcon: {
+    fontSize: 18,
+    marginRight: 8,
   },
   whatsappBannerText: {
     fontSize: 13,
-    color: '#5A7D9C',
-    marginLeft: 8,
-    marginRight: 4,
+    color: '#888888',
   },
 });
 
