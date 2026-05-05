@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 
 // Change this to your deployed backend URL
-const API_URL = 'http://localhost:5000/api';
+const API_URL = 'https://gisc-app-production.up.railway.app/api';
 // For production: 'https://your-backend-url.com/api'
 
 const api = axios.create({
