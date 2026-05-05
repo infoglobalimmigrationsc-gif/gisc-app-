@@ -6,76 +6,58 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Image,
-  TextInput,
   RefreshControl,
-  Alert,
+  Image,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
-
-const API_URL = 'https://api.gisc-liberia.com/api';
+import api from '../../services/api';
 
 const HomeScreen = ({ navigation }) => {
   const [userName, setUserName] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const [featuredUniversities, setFeaturedUniversities] = useState([
+  const [featuredCourses, setFeaturedCourses] = useState([
     {
       id: 1,
-      name: 'University of Toronto',
+      name: 'AEC in Business Management',
+      institution: 'LaSalle College',
       country: 'Canada',
-      employability: '95%',
-      image: 'toronto',
-      scholarships: 'Up to 50%',
+      tuition: 'CAD 13,800',
+      difficulty: 'TOUGH TO GET IN',
+      difficultyColor: '#E74C3C',
+      type: 'Certifications',
     },
     {
       id: 2,
-      name: 'Arizona State University',
-      country: 'USA',
-      employability: '92%',
-      image: 'asu',
-      scholarships: 'Up to $15,000',
+      name: 'Certificate Business Administration',
+      institution: 'Bow Valley College',
+      country: 'Canada',
+      tuition: 'CAD 16,492',
+      difficulty: 'EASY TO GET IN',
+      difficultyColor: '#27AE60',
+      type: 'Certificate',
     },
     {
       id: 3,
-      name: 'University of Birmingham',
-      country: 'UK',
-      employability: '94%',
-      image: 'birmingham',
-      scholarships: 'Up to £5,000',
-    },
-    {
-      id: 4,
-      name: 'Conestoga College',
+      name: 'Certificate in Business',
+      institution: 'University of Prince Edward Island',
       country: 'Canada',
-      employability: '89%',
-      image: 'conestoga',
-      scholarships: 'Up to CAD 3,000',
+      tuition: 'CAD 15,580',
+      difficulty: 'GIVE IT A TRY',
+      difficultyColor: '#F39C12',
+      type: 'Certificate',
     },
   ]);
 
-  const [popularDestinations] = useState([
-    { name: 'United States', institutions: 127, flag: '🇺🇸', code: 'usa' },
-    { name: 'Canada', institutions: 98, flag: '🇨🇦', code: 'canada' },
-    { name: 'United Kingdom', institutions: 112, flag: '🇬🇧', code: 'uk' },
-    { name: 'Germany', institutions: 76, flag: '🇩🇪', code: 'germany' },
-    { name: 'France', institutions: 54, flag: '🇫🇷', code: 'france' },
-    { name: 'Spain', institutions: 42, flag: '🇪🇸', code: 'spain' },
-    { name: 'Malta', institutions: 15, flag: '🇲🇹', code: 'malta' },
-    { name: 'Dubai', institutions: 28, flag: '🇦🇪', code: 'uae' },
-  ]);
+  const popularDestinations = [
+    { name: 'United Kingdom', institutions: 113, flag: '🇬🇧' },
+    { name: 'United States', institutions: 131, flag: '🇺🇸' },
+    { name: 'Canada', institutions: 37, flag: '🇨🇦' },
+  ];
 
-  const [trendingCourses] = useState([
-    { name: 'Business Administration', level: 'MBA', salary: 'CAD 15,580' },
-    { name: 'Computer Science', level: 'Bachelor', salary: '$25,000' },
-    { name: 'Data Science', level: 'Master', salary: '€18,500' },
-    { name: 'Nursing', level: 'Bachelor', salary: '£12,000' },
-    { name: 'Engineering', level: 'Master', salary: '$22,000' },
-    { name: 'Finance', level: 'Bachelor', salary: '€15,000' },
-  ]);
-
-  const [userProfile, setUserProfile] = useState(null);
+  const trendingSubjects = [
+    'Business', 'Business Administration', 'Education', 
+    'Computer Sciences', 'Law', 'Finance'
+  ];
 
   useEffect(() => {
     loadUserData();
@@ -87,7 +69,6 @@ const HomeScreen = ({ navigation }) => {
       if (userStr) {
         const user = JSON.parse(userStr);
         setUserName(user.fullName?.split(' ')[0] || 'Student');
-        setUserProfile(user);
       }
     } catch (error) {
       console.error('Error loading user:', error);
@@ -97,38 +78,24 @@ const HomeScreen = ({ navigation }) => {
   const onRefresh = async () => {
     setRefreshing(true);
     await loadUserData();
-    // Fetch updated data from API
     setRefreshing(false);
-  };
-
-  const handleStartApplication = () => {
-    navigation.navigate('ApplicationLock');
-  };
-
-  const handleCountrySelect = (country) => {
-    navigation.navigate('CountryDetail', { country });
-  };
-
-  const handleCourseSelect = (course) => {
-    navigation.navigate('CourseDetail', { course });
-  };
-
-  const handleUniversitySelect = (university) => {
-    navigation.navigate('UniversityDetail', { university });
   };
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Hello, {userName}! 👋</Text>
-          <Text style={styles.subGreeting}>Your study abroad journey starts here</Text>
+        <View style={styles.headerLeft}>
+          <View style={styles.logoSmall}>
+            <Text style={styles.logoSmallText}>GISC</Text>
+          </View>
+          <Text style={styles.headerTitle}>Find Courses and Institutions</Text>
         </View>
-        <TouchableOpacity onPress={() => navigation.navigate('Notifications')}>
-          <View style={styles.notificationBadge}>
-            <Ionicons name="notifications-outline" size={24} color="#1E3A5F" />
-            <View style={styles.badge} />
+        <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
+              {userName?.charAt(0)?.toUpperCase() || 'D'}
+            </Text>
           </View>
         </TouchableOpacity>
       </View>
@@ -140,69 +107,32 @@ const HomeScreen = ({ navigation }) => {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {/* Search Bar */}
-        <TouchableOpacity 
-          style={styles.searchBar}
-          onPress={() => navigation.navigate('Search')}
-        >
-          <Ionicons name="search-outline" size={20} color="#8AA0B8" />
-          <Text style={styles.searchPlaceholder}>
-            Search courses, universities...
-          </Text>
-        </TouchableOpacity>
-
-        {/* Urgency Banner */}
-        <View style={styles.urgencyBanner}>
-          <View style={styles.urgencyContent}>
-            <Text style={styles.urgencyTitle}>🎓 Fall 2026 Intake</Text>
-            <Text style={styles.urgencySubtitle}>Secure your spot now!</Text>
-            <View style={styles.urgencyTag}>
-              <Text style={styles.urgencyTagText}>🔑 LAST FEW SLOTS LEFT</Text>
-            </View>
+        {/* IELTS/Services Banner */}
+        <View style={styles.banner}>
+          <View style={styles.bannerContent}>
+            <Text style={styles.bannerTitle}>🎓 Ready to Study Abroad?</Text>
+            <Text style={styles.bannerSubtitle}>
+              Expert-led | Affordable | High Success Rate
+            </Text>
           </View>
-          <TouchableOpacity 
-            style={styles.urgencyButton}
-            onPress={handleStartApplication}
-          >
-            <Text style={styles.urgencyButtonText}>Book your slot →</Text>
+          <TouchableOpacity style={styles.bannerButton}>
+            <Text style={styles.bannerButtonText}>Learn more</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Quick Stats */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>500+</Text>
-            <Text style={styles.statLabel}>Students Placed</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>97%</Text>
-            <Text style={styles.statLabel}>Visa Success</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>$2M+</Text>
-            <Text style={styles.statLabel}>Scholarships Secured</Text>
-          </View>
+        {/* Success Rate Card */}
+        <View style={styles.successCard}>
+          <Text style={styles.successLabel}>Visa Success Rate</Text>
+          <Text style={styles.successScore}>97%</Text>
+          <Text style={styles.successRating}>Excellent</Text>
         </View>
 
         {/* Popular Destinations */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Popular Destinations</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('AllCountries')}>
-              <Text style={styles.seeAll}>See All →</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            style={styles.horizontalScroll}
-          >
+          <Text style={styles.sectionTitle}>Popular Destinations</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {popularDestinations.map((dest, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.destinationCard}
-                onPress={() => handleCountrySelect(dest)}
-              >
+              <TouchableOpacity key={index} style={styles.destinationCard}>
                 <Text style={styles.destinationFlag}>{dest.flag}</Text>
                 <Text style={styles.destinationName}>{dest.name}</Text>
                 <Text style={styles.destinationCount}>{dest.institutions} Institutions</Text>
@@ -211,107 +141,112 @@ const HomeScreen = ({ navigation }) => {
           </ScrollView>
         </View>
 
-        {/* Featured Universities */}
+        {/* Genie's Matches Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Top Institutions</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('AllUniversities')}>
-              <Text style={styles.seeAll}>See All →</Text>
+            <Text style={styles.sectionTitle}>🎯 Recommended Matches</Text>
+            <TouchableOpacity>
+              <Text style={styles.infoLink}>What's this? ⓘ</Text>
             </TouchableOpacity>
           </View>
-          {featuredUniversities.map((uni) => (
-            <TouchableOpacity
-              key={uni.id}
-              style={styles.universityCard}
-              onPress={() => handleUniversitySelect(uni)}
-            >
-              <View style={styles.universityImagePlaceholder}>
-                <Ionicons name="business-outline" size={40} color="#1E3A5F" />
-              </View>
-              <View style={styles.universityInfo}>
-                <Text style={styles.universityName}>{uni.name}</Text>
-                <Text style={styles.universityCountry}>{uni.country}</Text>
-                <View style={styles.universityStats}>
-                  <View style={styles.employabilityTag}>
-                    <Ionicons name="trending-up" size={12} color="#27AE60" />
-                    <Text style={styles.employabilityText}>{uni.employability} Employability</Text>
-                  </View>
-                  <View style={styles.scholarshipTag}>
-                    <Ionicons name="cash-outline" size={12} color="#F39C12" />
-                    <Text style={styles.scholarshipText}>{uni.scholarships}</Text>
-                  </View>
+
+          {/* Difficulty Filter Chips */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
+            <TouchableOpacity style={[styles.filterChip, styles.filterChipActive]}>
+              <Text style={[styles.filterChipText, styles.filterChipTextActive]}>All</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.filterChip}>
+              <Text style={styles.filterChipText}>Easy to get in</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.filterChip}>
+              <Text style={styles.filterChipText}>Give it a try</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.filterChip}>
+              <Text style={styles.filterChipText}>Tougher than average</Text>
+            </TouchableOpacity>
+          </ScrollView>
+
+          {/* Course Cards */}
+          {featuredCourses.map((course) => (
+            <TouchableOpacity key={course.id} style={styles.courseCard}>
+              <View style={styles.courseCardHeader}>
+                <View style={[styles.difficultyBadge, { backgroundColor: course.difficultyColor + '20' }]}>
+                  <Text style={[styles.difficultyText, { color: course.difficultyColor }]}>
+                    {course.difficulty}
+                  </Text>
                 </View>
+                <Text style={styles.courseType}>{course.type}</Text>
+              </View>
+              
+              <Text style={styles.courseName}>{course.name}</Text>
+              
+              <View style={styles.courseDetails}>
+                <Text style={styles.institutionName}>📍 {course.institution}</Text>
+                <Text style={styles.courseCountry}>{course.country}</Text>
+              </View>
+              
+              <View style={styles.courseFooter}>
+                <Text style={styles.tuition}>{course.tuition}</Text>
+                <TouchableOpacity style={styles.applyButton}>
+                  <Text style={styles.applyButtonText}>View Details</Text>
+                </TouchableOpacity>
               </View>
             </TouchableOpacity>
           ))}
         </View>
 
+        {/* Top Institutions */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Top Institutions</Text>
+          <TouchableOpacity style={styles.institutionCard}>
+            <View style={styles.institutionIcon}>
+              <Text style={styles.institutionIconText}>TRU</Text>
+            </View>
+            <View style={styles.institutionInfo}>
+              <Text style={styles.institutionName}>Thompson Rivers University</Text>
+              <Text style={styles.institutionCountry}>Canada</Text>
+            </View>
+            <Text style={styles.institutionArrow}>→</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Trending Subjects */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Trending Subjects</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('AllCourses')}>
-              <Text style={styles.seeAll}>See All →</Text>
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.sectionTitle}>Trending Subjects</Text>
           <View style={styles.subjectsGrid}>
-            {trendingCourses.map((course, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.subjectChip}
-                onPress={() => handleCourseSelect(course)}
-              >
-                <Text style={styles.subjectName}>{course.name}</Text>
-                <Text style={styles.subjectLevel}>{course.level}</Text>
-                <Text style={styles.subjectSalary}>{course.salary}</Text>
+            {trendingSubjects.map((subject, index) => (
+              <TouchableOpacity key={index} style={styles.subjectChip}>
+                <Text style={styles.subjectText}>{subject}</Text>
               </TouchableOpacity>
             ))}
           </View>
         </View>
 
-        {/* Referral Banner */}
-        <View style={styles.referralBanner}>
-          <View style={styles.referralContent}>
-            <Text style={styles.referralTitle}>💰 Refer a Friend</Text>
-            <Text style={styles.referralText}>
-              They enroll, you earn GBP 250!
-            </Text>
-          </View>
-          <TouchableOpacity 
-            style={styles.referralButton}
-            onPress={() => navigation.navigate('Referral')}
-          >
-            <Text style={styles.referralButtonText}>Refer Now →</Text>
-          </TouchableOpacity>
-        </View>
-
         {/* Stays Banner */}
         <View style={styles.staysBanner}>
-          <Ionicons name="home-outline" size={24} color="#1E3A5F" />
           <View style={styles.staysContent}>
-            <Text style={styles.staysTitle}>Student Accommodation</Text>
+            <Text style={styles.staysTitle}>🏠 Student Accommodation</Text>
             <Text style={styles.staysText}>
-              Budget homes to private studios in 450+ cities
+              Budget homes to private studios in 450+ global cities
             </Text>
           </View>
-          <TouchableOpacity onPress={() => navigation.navigate('Stays')}>
-            <Ionicons name="chevron-forward" size={24} color="#1E3A5F" />
+          <Text style={styles.staysArrow}>→</Text>
+        </View>
+
+        {/* Referral Banner */}
+        <View style={styles.referralBanner}>
+          <View>
+            <Text style={styles.referralTitle}>Here's $250</Text>
+            <Text style={styles.referralText}>
+              Refer a friend to GISC. They enrol, the reward is yours
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.referralButton}>
+            <Text style={styles.referralButtonText}>Refer now</Text>
           </TouchableOpacity>
         </View>
 
-        {/* CTA Section */}
-        <View style={styles.ctaSection}>
-          <Text style={styles.ctaTitle}>Ready to Study Abroad?</Text>
-          <Text style={styles.ctaText}>
-            Get personalized guidance from our expert counselors
-          </Text>
-          <TouchableOpacity 
-            style={styles.ctaButton}
-            onPress={handleStartApplication}
-          >
-            <Text style={styles.ctaButtonText}>Start Your Application →</Text>
-          </TouchableOpacity>
-        </View>
+        <View style={{ height: 20 }} />
       </ScrollView>
     </View>
   );
@@ -320,127 +255,114 @@ const HomeScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#ffffff',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
+    paddingTop: 55,
+    paddingBottom: 14,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
   },
-  greeting: {
-    fontSize: 24,
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  logoSmall: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    backgroundColor: '#cc2936',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  logoSmallText: {
+    fontSize: 12,
     fontWeight: 'bold',
-    color: '#1E3A5F',
+    color: '#ffffff',
   },
-  subGreeting: {
-    fontSize: 14,
-    color: '#5A7D9C',
-    marginTop: 4,
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a3a5c',
   },
-  notificationBadge: {
-    position: 'relative',
+  avatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#1a3a5c',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  badge: {
-    position: 'absolute',
-    top: 2,
-    right: 2,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#E74C3C',
+  avatarText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
   },
   scrollView: {
     flex: 1,
     paddingHorizontal: 20,
   },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F5F9FF',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#E8EEF5',
-  },
-  searchPlaceholder: {
-    marginLeft: 12,
-    fontSize: 15,
-    color: '#8AA0B8',
-  },
-  urgencyBanner: {
-    backgroundColor: '#1E3A5F',
+  banner: {
+    backgroundColor: '#1a3a5c',
     borderRadius: 16,
     padding: 20,
-    marginBottom: 20,
-  },
-  urgencyContent: {
+    marginTop: 16,
     marginBottom: 16,
   },
-  urgencyTitle: {
-    fontSize: 22,
+  bannerContent: {
+    marginBottom: 14,
+  },
+  bannerTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: '#ffffff',
+    marginBottom: 4,
   },
-  urgencySubtitle: {
-    fontSize: 16,
-    color: '#A8D0E6',
-    marginTop: 4,
+  bannerSubtitle: {
+    fontSize: 13,
+    color: '#c0c0c0',
   },
-  urgencyTag: {
-    backgroundColor: '#E74C3C',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+  bannerButton: {
+    backgroundColor: '#cc2936',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
     alignSelf: 'flex-start',
-    marginTop: 12,
   },
-  urgencyTagText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  urgencyButton: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  urgencyButtonText: {
-    fontSize: 16,
+  bannerButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
     fontWeight: '600',
-    color: '#1E3A5F',
   },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#F5F9FF',
-    borderRadius: 12,
-    padding: 12,
-    marginHorizontal: 4,
+  successCard: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 16,
+    padding: 20,
     alignItems: 'center',
+    marginBottom: 24,
     borderWidth: 1,
-    borderColor: '#E8EEF5',
+    borderColor: '#e0e0e0',
   },
-  statNumber: {
-    fontSize: 20,
+  successLabel: {
+    fontSize: 14,
+    color: '#888888',
+    marginBottom: 4,
+  },
+  successScore: {
+    fontSize: 42,
     fontWeight: 'bold',
-    color: '#1E3A5F',
+    color: '#27AE60',
   },
-  statLabel: {
-    fontSize: 11,
-    color: '#5A7D9C',
-    textAlign: 'center',
-    marginTop: 4,
+  successRating: {
+    fontSize: 14,
+    color: '#27AE60',
+    fontWeight: '500',
   },
   section: {
     marginBottom: 28,
@@ -449,227 +371,252 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1E3A5F',
+    color: '#1a3a5c',
+    marginBottom: 14,
   },
-  seeAll: {
-    fontSize: 14,
-    color: '#1E3A5F',
-    fontWeight: '500',
-  },
-  horizontalScroll: {
-    marginLeft: -4,
+  infoLink: {
+    fontSize: 13,
+    color: '#888888',
   },
   destinationCard: {
-    backgroundColor: '#F5F9FF',
-    borderRadius: 12,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 14,
     padding: 16,
     marginRight: 12,
-    minWidth: 130,
+    minWidth: 140,
     borderWidth: 1,
-    borderColor: '#E8EEF5',
+    borderColor: '#e0e0e0',
   },
   destinationFlag: {
-    fontSize: 32,
+    fontSize: 36,
     marginBottom: 8,
   },
   destinationName: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#1E3A5F',
+    color: '#1a3a5c',
   },
   destinationCount: {
     fontSize: 12,
-    color: '#5A7D9C',
+    color: '#888888',
     marginTop: 4,
   },
-  universityCard: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
+  filterRow: {
+    marginBottom: 16,
+  },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
+    marginRight: 8,
     borderWidth: 1,
-    borderColor: '#E8EEF5',
+    borderColor: '#e0e0e0',
+  },
+  filterChipActive: {
+    backgroundColor: '#1a3a5c',
+    borderColor: '#1a3a5c',
+  },
+  filterChipText: {
+    fontSize: 13,
+    color: '#666666',
+  },
+  filterChipTextActive: {
+    color: '#ffffff',
+    fontWeight: '500',
+  },
+  courseCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowRadius: 8,
     elevation: 2,
   },
-  universityImagePlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 12,
-    backgroundColor: '#EBF3FA',
+  courseCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  difficultyBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  difficultyText: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  courseType: {
+    fontSize: 12,
+    color: '#888888',
+  },
+  courseName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a3a5c',
+    marginBottom: 8,
+  },
+  courseDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  institutionName: {
+    fontSize: 13,
+    color: '#666666',
+  },
+  courseCountry: {
+    fontSize: 13,
+    color: '#888888',
+  },
+  courseFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    paddingTop: 12,
+  },
+  tuition: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1a3a5c',
+  },
+  applyButton: {
+    backgroundColor: '#cc2936',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  applyButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  institutionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  institutionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: '#1a3a5c',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14,
   },
-  universityInfo: {
+  institutionIconText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  institutionInfo: {
     flex: 1,
   },
-  universityName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E3A5F',
-  },
-  universityCountry: {
-    fontSize: 13,
-    color: '#5A7D9C',
+  institutionCountry: {
+    fontSize: 12,
+    color: '#888888',
     marginTop: 2,
   },
-  universityStats: {
-    flexDirection: 'row',
-    marginTop: 8,
-  },
-  employabilityTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E8F8F0',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginRight: 8,
-  },
-  employabilityText: {
-    fontSize: 11,
-    color: '#27AE60',
-    marginLeft: 4,
-  },
-  scholarshipTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FEF9E7',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  scholarshipText: {
-    fontSize: 11,
-    color: '#F39C12',
-    marginLeft: 4,
+  institutionArrow: {
+    fontSize: 20,
+    color: '#888888',
   },
   subjectsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginHorizontal: -4,
   },
   subjectChip: {
-    width: '48%',
-    backgroundColor: '#F5F9FF',
-    borderRadius: 12,
-    padding: 14,
-    margin: 4,
-    borderWidth: 1,
-    borderColor: '#E8EEF5',
-  },
-  subjectName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1E3A5F',
-  },
-  subjectLevel: {
-    fontSize: 12,
-    color: '#5A7D9C',
-    marginTop: 4,
-  },
-  subjectSalary: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#27AE60',
-    marginTop: 6,
-  },
-  referralBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF3E0',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  referralContent: {
-    flex: 1,
-  },
-  referralTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E3A5F',
-  },
-  referralText: {
-    fontSize: 13,
-    color: '#5A7D9C',
-    marginTop: 2,
-  },
-  referralButton: {
-    backgroundColor: '#1E3A5F',
-    borderRadius: 8,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
+    marginRight: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
-  referralButtonText: {
-    color: '#FFFFFF',
+  subjectText: {
     fontSize: 13,
+    color: '#1a3a5c',
     fontWeight: '500',
   },
   staysBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F9FF',
-    borderRadius: 12,
+    justifyContent: 'space-between',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 14,
     padding: 16,
-    marginBottom: 24,
+    marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E8EEF5',
+    borderColor: '#e0e0e0',
   },
   staysContent: {
     flex: 1,
-    marginLeft: 12,
   },
   staysTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#1E3A5F',
+    color: '#1a3a5c',
+    marginBottom: 4,
   },
   staysText: {
     fontSize: 12,
-    color: '#5A7D9C',
+    color: '#888888',
+  },
+  staysArrow: {
+    fontSize: 20,
+    color: '#888888',
+  },
+  referralBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FFF3E0',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 30,
+  },
+  referralTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1a3a5c',
+  },
+  referralText: {
+    fontSize: 13,
+    color: '#666666',
     marginTop: 2,
   },
-  ctaSection: {
-    backgroundColor: '#1E3A5F',
-    borderRadius: 16,
-    padding: 24,
-    marginBottom: 30,
-    alignItems: 'center',
+  referralButton: {
+    backgroundColor: '#cc2936',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
   },
-  ctaTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    textAlign: 'center',
-  },
-  ctaText: {
-    fontSize: 14,
-    color: '#A8D0E6',
-    textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 20,
-  },
-  ctaButton: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-  },
-  ctaButtonText: {
-    fontSize: 16,
+  referralButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
     fontWeight: '600',
-    color: '#1E3A5F',
   },
 });
 
