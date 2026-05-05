@@ -25,6 +25,7 @@ mongoose.connect(process.env.MONGODB_URI)
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/profile', authRoutes);  // Profile routes use the same auth router
 app.use('/api/application', applicationRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/chat', chatRoutes);
