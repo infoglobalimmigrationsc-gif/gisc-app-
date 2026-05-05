@@ -169,4 +169,31 @@ router.post('/forgot-password', async (req, res) => {
   });
 });
 
+// Check if email exists
+router.post('/check-email', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Email is required' 
+      });
+    }
+    
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    
+    res.json({ 
+      success: true, 
+      exists: !!existingUser 
+    });
+  } catch (error) {
+    console.error('Check email error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to check email' 
+    });
+  }
+});
+
 module.exports = router;
