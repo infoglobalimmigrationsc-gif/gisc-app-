@@ -6,103 +6,56 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
-  ActivityIndicator,
   Alert,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const API_URL = 'https://api.gisc-liberia.com/api';
+import axios from 'axios';
+import api from '../../services/api';
 
 const SignupScreen = ({ navigation }) => {
-  const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
-    phone: '',
-    password: '',
-    confirmPassword: '',
-  });
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState({});
-  const [acceptTerms, setAcceptTerms] = useState(false);
+  const [step, setStep] = useState('email'); // 'email' or 'profile'
 
-  const validateForm = () => {
-    const newErrors = {};
-    
-    if (!formData.fullName.trim()) {
-      newErrors.fullName = 'Full name is required';
+  const handleEmailContinue = async () => {
+    if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address.');
+      return;
     }
-    
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email';
-    }
-    
-    if (!formData.phone.trim()) {
-      newErrors.phone = 'Phone number is required';
-    } else if (!/^[0-9+\-\s]{10,15}$/.test(formData.phone)) {
-      newErrors.phone = 'Enter valid phone number';
-    }
-    
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
-    }
-    
-    if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
-    }
-    
-    if (!acceptTerms) {
-      newErrors.terms = 'You must accept the Terms of Service';
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
 
-  const handleSignup = async () => {
-    if (!validateForm()) return;
-    
     setLoading(true);
     try {
-      const response = await axios.post(`${API_URL}/auth/register`, {
-        fullName: formData.fullName,
-        email: formData.email,
-        phone: formData.phone,
-        password: formData.password,
-        userType: 'student',
-        source: 'mobile_app',
-      });
+      // Check if user exists
+      const response = await api.post('/auth/check-email', { email });
       
-      if (response.data.success) {
-        await AsyncStorage.setItem('gisc_token', response.data.token);
-        await AsyncStorage.setItem('gisc_user', JSON.stringify(response.data.user));
-        await AsyncStorage.setItem('gisc_profile_complete', 'false');
-        
+      if (response.data.exists) {
+        // Returning user - prompt to login
         Alert.alert(
-          'Welcome to GISC! 🎓',
-          'Your account has been created successfully. Let\'s complete your profile to get personalized recommendations.',
-          [{ text: 'Continue', onPress: () => navigation.replace('ProfileSetup') }]
+          'Account Exists',
+          'Please log in with your existing account.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Go to Login', onPress: () => navigation.navigate('Login') },
+          ]
         );
+      } else {
+        // New user - proceed to profile setup
+        setStep('profile');
       }
     } catch (error) {
-      Alert.alert(
-        'Signup Failed',
-        error.response?.data?.message || 'Something went wrong. Please try again.'
-      );
+      Alert.alert('Error', 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
   };
+
+  if (step === 'profile') {
+    return <ProfileStep email={email} navigation={navigation} />;
+  }
 
   return (
     <KeyboardAvoidingView
@@ -110,335 +63,441 @@ const SignupScreen = ({ navigation }) => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView
-        style={styles.scrollView}
         contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#1E3A5F" />
-        </TouchableOpacity>
-
-        <View style={styles.header}>
-          <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>
-            Join GISC and start your study abroad journey
-          </Text>
+        {/* Logo */}
+        <View style={styles.logoContainer}>
+          <View style={styles.logoIcon}>
+            <Text style={styles.logoText}>GISC</Text>
+          </View>
+          <Text style={styles.brandName}>Global Immigration SC</Text>
         </View>
 
-        <View style={styles.form}>
-          {/* Full Name Input */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Full Name</Text>
-            <View style={[styles.inputContainer, errors.fullName && styles.inputError]}>
-              <Ionicons name="person-outline" size={20} color="#5A7D9C" />
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your full name"
-                placeholderTextColor="#8AA0B8"
-                value={formData.fullName}
-                onChangeText={(text) => {
-                  setFormData({ ...formData, fullName: text });
-                  setErrors({ ...errors, fullName: null });
-                }}
-                autoCapitalize="words"
-              />
-            </View>
-            {errors.fullName && (
-              <Text style={styles.errorText}>{errors.fullName}</Text>
-            )}
-          </View>
+        {/* Main Content */}
+        <View style={styles.mainContent}>
+          <Text style={styles.title}>
+            Your one-stop platform for all things study abroad
+          </Text>
 
           {/* Email Input */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email Address</Text>
-            <View style={[styles.inputContainer, errors.email && styles.inputError]}>
-              <Ionicons name="mail-outline" size={20} color="#5A7D9C" />
-              <TextInput
-                style={styles.input}
-                placeholder="your.email@example.com"
-                placeholderTextColor="#8AA0B8"
-                value={formData.email}
-                onChangeText={(text) => {
-                  setFormData({ ...formData, email: text.toLowerCase() });
-                  setErrors({ ...errors, email: null });
-                }}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-            </View>
-            {errors.email && (
-              <Text style={styles.errorText}>{errors.email}</Text>
-            )}
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Email address</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="your.email@example.com"
+              placeholderTextColor="#999999"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
           </View>
 
-          {/* Phone Input */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Phone Number</Text>
-            <View style={[styles.inputContainer, errors.phone && styles.inputError]}>
-              <Ionicons name="call-outline" size={20} color="#5A7D9C" />
-              <TextInput
-                style={styles.input}
-                placeholder="+231 XXX XXX XXX"
-                placeholderTextColor="#8AA0B8"
-                value={formData.phone}
-                onChangeText={(text) => {
-                  setFormData({ ...formData, phone: text });
-                  setErrors({ ...errors, phone: null });
-                }}
-                keyboardType="phone-pad"
-              />
-            </View>
-            {errors.phone && (
-              <Text style={styles.errorText}>{errors.phone}</Text>
-            )}
-          </View>
+          {/* Terms */}
+          <Text style={styles.terms}>
+            By proceeding, you agree to the{' '}
+            <Text style={styles.termsLink}>Terms & Conditions</Text> and{' '}
+            <Text style={styles.termsLink}>Privacy Policy</Text>.
+          </Text>
 
-          {/* Password Input */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Password</Text>
-            <View style={[styles.inputContainer, errors.password && styles.inputError]}>
-              <Ionicons name="lock-closed-outline" size={20} color="#5A7D9C" />
-              <TextInput
-                style={styles.input}
-                placeholder="Minimum 6 characters"
-                placeholderTextColor="#8AA0B8"
-                value={formData.password}
-                onChangeText={(text) => {
-                  setFormData({ ...formData, password: text });
-                  setErrors({ ...errors, password: null });
-                }}
-                secureTextEntry={!showPassword}
-              />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                <Ionicons
-                  name={showPassword ? "eye-outline" : "eye-off-outline"}
-                  size={20}
-                  color="#5A7D9C"
-                />
-              </TouchableOpacity>
-            </View>
-            {errors.password && (
-              <Text style={styles.errorText}>{errors.password}</Text>
-            )}
-          </View>
-
-          {/* Confirm Password Input */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Confirm Password</Text>
-            <View style={[styles.inputContainer, errors.confirmPassword && styles.inputError]}>
-              <Ionicons name="lock-closed-outline" size={20} color="#5A7D9C" />
-              <TextInput
-                style={styles.input}
-                placeholder="Re-enter your password"
-                placeholderTextColor="#8AA0B8"
-                value={formData.confirmPassword}
-                onChangeText={(text) => {
-                  setFormData({ ...formData, confirmPassword: text });
-                  setErrors({ ...errors, confirmPassword: null });
-                }}
-                secureTextEntry={!showConfirmPassword}
-              />
-              <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-                <Ionicons
-                  name={showConfirmPassword ? "eye-outline" : "eye-off-outline"}
-                  size={20}
-                  color="#5A7D9C"
-                />
-              </TouchableOpacity>
-            </View>
-            {errors.confirmPassword && (
-              <Text style={styles.errorText}>{errors.confirmPassword}</Text>
-            )}
-          </View>
-
-          {/* Terms and Conditions */}
-          <View style={styles.termsContainer}>
-            <TouchableOpacity
-              style={styles.checkboxContainer}
-              onPress={() => {
-                setAcceptTerms(!acceptTerms);
-                setErrors({ ...errors, terms: null });
-              }}
-            >
-              <View style={[styles.checkbox, acceptTerms && styles.checkboxChecked]}>
-                {acceptTerms && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
-              </View>
-              <Text style={styles.termsText}>
-                I agree to the{' '}
-                <Text style={styles.termsLink}>Terms of Service</Text> and{' '}
-                <Text style={styles.termsLink}>Privacy Policy</Text>
-              </Text>
-            </TouchableOpacity>
-            {errors.terms && (
-              <Text style={styles.errorText}>{errors.terms}</Text>
-            )}
-          </View>
-
-          {/* Signup Button */}
+          {/* Continue Button */}
           <TouchableOpacity
-            style={[styles.signupButton, loading && styles.signupButtonDisabled]}
-            onPress={handleSignup}
+            style={[styles.continueButton, loading && styles.buttonDisabled]}
+            onPress={handleEmailContinue}
             disabled={loading}
+            activeOpacity={0.9}
           >
             {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color="#ffffff" />
             ) : (
-              <Text style={styles.signupButtonText}>Create Account</Text>
+              <Text style={styles.continueButtonText}>Continue</Text>
             )}
+          </TouchableOpacity>
+
+          {/* Or Divider */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>OR</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Google Sign-in */}
+          <TouchableOpacity style={styles.googleButton} activeOpacity={0.8}>
+            <Text style={styles.googleButtonText}>G</Text>
+            <Text style={styles.googleButtonLabel}>Continue with Google</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Already have an account? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-            <Text style={styles.footerLink}>Sign In</Text>
-          </TouchableOpacity>
+        {/* Trust Signals */}
+        <View style={styles.trustSection}>
+          <View style={styles.trustItem}>
+            <Text style={styles.trustStars}>⭐ 4.7/5</Text>
+            <Text style={styles.trustLabel}>Google rating</Text>
+          </View>
+          <View style={styles.trustDivider} />
+          <View style={styles.trustItem}>
+            <Text style={styles.trustNumber}>500+</Text>
+            <Text style={styles.trustLabel}>Students counselled</Text>
+          </View>
+          <View style={styles.trustDivider} />
+          <View style={styles.trustItem}>
+            <Text style={styles.trustNumber}>1K+</Text>
+            <Text style={styles.trustLabel}>Courses available</Text>
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 };
 
+// Profile Step Component (Screenshot 6 pattern)
+const ProfileStep = ({ email, navigation }) => {
+  const [formData, setFormData] = useState({
+    fullName: '',
+    country: 'Liberia',
+    nationality: 'Liberian',
+    phone: '',
+    preferredCountry: '',
+    password: '',
+  });
+  const [loading, setLoading] = useState(false);
+
+  const handleCompleteProfile = async () => {
+    if (!formData.fullName || !formData.phone || !formData.preferredCountry || !formData.password) {
+      Alert.alert('Incomplete', 'Please fill all required fields.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await api.post('/auth/register', {
+        email,
+        ...formData,
+      });
+
+      if (response.data.success) {
+        await AsyncStorage.setItem('gisc_token', response.data.token);
+        await AsyncStorage.setItem('gisc_user', JSON.stringify(response.data.user));
+        await AsyncStorage.setItem('gisc_profile_complete', 'false');
+        navigation.replace('ProfileSetup');
+      }
+    } catch (error) {
+      Alert.alert('Error', error.response?.data?.message || 'Registration failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <ScrollView style={styles.profileContainer} contentContainerStyle={styles.profileContent}>
+      <TouchableOpacity onPress={() => navigation.goBack()}>
+        <Text style={styles.backLink}>← Back</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.profileTitle}>Academic Dreams</Text>
+      <Text style={styles.profileSubtitle}>Complete your profile; it takes just 30 secs!</Text>
+
+      <View style={styles.profileForm}>
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Full name</Text>
+          <Text style={styles.inputHint}>As per your passport or ID proof</Text>
+          <TextInput
+            style={styles.profileInput}
+            value={formData.fullName}
+            onChangeText={(t) => setFormData({ ...formData, fullName: t })}
+            placeholder="Enter your full name"
+            placeholderTextColor="#999"
+          />
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Country you live in</Text>
+          <TextInput
+            style={styles.profileInput}
+            value={formData.country}
+            onChangeText={(t) => setFormData({ ...formData, country: t })}
+          />
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Nationality</Text>
+          <TextInput
+            style={styles.profileInput}
+            value={formData.nationality}
+            onChangeText={(t) => setFormData({ ...formData, nationality: t })}
+          />
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Phone number</Text>
+          <TextInput
+            style={styles.profileInput}
+            value={formData.phone}
+            onChangeText={(t) => setFormData({ ...formData, phone: t })}
+            placeholder="+231 XX XXX XXXX"
+            placeholderTextColor="#999"
+            keyboardType="phone-pad"
+          />
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Where do you wish to study?</Text>
+          <TextInput
+            style={styles.profileInput}
+            value={formData.preferredCountry}
+            onChangeText={(t) => setFormData({ ...formData, preferredCountry: t })}
+            placeholder="e.g., Canada, USA, UK"
+            placeholderTextColor="#999"
+          />
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Set your password</Text>
+          <TextInput
+            style={styles.profileInput}
+            value={formData.password}
+            onChangeText={(t) => setFormData({ ...formData, password: t })}
+            placeholder="Minimum 6 characters"
+            placeholderTextColor="#999"
+            secureTextEntry
+          />
+        </View>
+
+        <TouchableOpacity
+          style={[styles.continueButton, loading && styles.buttonDisabled]}
+          onPress={handleCompleteProfile}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.continueButtonText}>Continue</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
+  );
+};
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  scrollView: {
-    flex: 1,
+    backgroundColor: '#ffffff',
   },
   content: {
+    flexGrow: 1,
+    justifyContent: 'space-between',
     paddingHorizontal: 24,
+    paddingTop: 60,
     paddingBottom: 40,
   },
-  backButton: {
-    marginTop: 50,
-    marginBottom: 16,
-    width: 40,
-    height: 40,
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  logoIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 16,
+    backgroundColor: '#cc2936',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  logoText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  brandName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a3a5c',
+    letterSpacing: 0.5,
+  },
+  mainContent: {
+    flex: 1,
     justifyContent: 'center',
   },
-  header: {
-    marginBottom: 32,
-  },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1E3A5F',
-    marginBottom: 8,
+    fontSize: 22,
+    fontWeight: '600',
+    color: '#1a3a5c',
+    textAlign: 'center',
+    marginBottom: 32,
+    lineHeight: 30,
   },
-  subtitle: {
-    fontSize: 15,
-    color: '#5A7D9C',
-    lineHeight: 22,
-  },
-  form: {
-    marginBottom: 24,
-  },
-  inputGroup: {
-    marginBottom: 20,
+  inputContainer: {
+    marginBottom: 12,
   },
   label: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#1E3A5F',
+    color: '#333333',
     marginBottom: 8,
   },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#D0DDE9',
+  input: {
+    backgroundColor: '#f5f5f5',
     borderRadius: 12,
     paddingHorizontal: 16,
-    height: 52,
-    backgroundColor: '#FAFCFE',
-  },
-  inputContainerFocused: {
-    borderColor: '#1E3A5F',
-  },
-  inputError: {
-    borderColor: '#E74C3C',
-  },
-  input: {
-    flex: 1,
-    marginLeft: 12,
+    paddingVertical: 16,
     fontSize: 16,
-    color: '#1E3A5F',
+    color: '#1a3a5c',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
-  errorText: {
+  terms: {
     fontSize: 12,
-    color: '#E74C3C',
-    marginTop: 6,
-    marginLeft: 4,
-  },
-  termsContainer: {
+    color: '#888888',
+    textAlign: 'center',
     marginBottom: 24,
-  },
-  checkboxContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#D0DDE9',
-    marginRight: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  checkboxChecked: {
-    backgroundColor: '#1E3A5F',
-    borderColor: '#1E3A5F',
-  },
-  termsText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#5A7D9C',
-    lineHeight: 20,
+    lineHeight: 18,
   },
   termsLink: {
-    color: '#1E3A5F',
+    color: '#1a3a5c',
     fontWeight: '500',
   },
-  signupButton: {
-    backgroundColor: '#1E3A5F',
+  continueButton: {
+    backgroundColor: '#cc2936',
     borderRadius: 12,
-    height: 56,
-    justifyContent: 'center',
+    paddingVertical: 16,
     alignItems: 'center',
-    shadowColor: '#1E3A5F',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
+    marginBottom: 20,
+    shadowColor: '#cc2936',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
     elevation: 4,
   },
-  signupButtonDisabled: {
+  buttonDisabled: {
     opacity: 0.7,
   },
-  signupButtonText: {
-    color: '#FFFFFF',
+  continueButtonText: {
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
   },
-  footer: {
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e0e0e0',
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 14,
+    color: '#888888',
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  googleButtonText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#4285F4',
+    marginRight: 12,
+  },
+  googleButtonLabel: {
+    fontSize: 16,
+    color: '#333333',
+    fontWeight: '500',
+  },
+  trustSection: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingTop: 30,
   },
-  footerText: {
-    fontSize: 14,
-    color: '#5A7D9C',
+  trustItem: {
+    alignItems: 'center',
+    paddingHorizontal: 12,
   },
-  footerLink: {
+  trustStars: {
     fontSize: 14,
-    color: '#1E3A5F',
-    fontWeight: '600',
+    color: '#1a3a5c',
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  trustNumber: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1a3a5c',
+    marginBottom: 2,
+  },
+  trustLabel: {
+    fontSize: 11,
+    color: '#888888',
+  },
+  trustDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: '#e0e0e0',
+  },
+  // Profile step styles
+  profileContainer: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  profileContent: {
+    paddingHorizontal: 24,
+    paddingTop: 60,
+    paddingBottom: 40,
+  },
+  backLink: {
+    fontSize: 16,
+    color: '#1a3a5c',
+    marginBottom: 24,
+  },
+  profileTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#1a3a5c',
+    marginBottom: 8,
+  },
+  profileSubtitle: {
+    fontSize: 15,
+    color: '#888888',
+    marginBottom: 32,
+  },
+  profileForm: {
+    gap: 20,
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#333333',
+    marginBottom: 4,
+  },
+  inputHint: {
+    fontSize: 12,
+    color: '#aaaaaa',
+    marginBottom: 8,
+  },
+  profileInput: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: '#1a3a5c',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
 });
 
