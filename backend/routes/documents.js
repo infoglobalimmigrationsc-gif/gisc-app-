@@ -1,129 +1,78 @@
-// backend/routes/documents.js
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const path = require('path');
+const fs = require('fs');
 const Document = require('../models/Document');
 const User = require('../models/User');
 const authMiddleware = require('../middleware/auth');
 
-// Configure S3
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+const uploadDir = path.join(__dirname, '..', 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const userDir = path.join(uploadDir, req.userId || 'anonymous');
+    if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true });
+    cb(null, userDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueName = `${Date.now()}_${file.originalname.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+    cb(null, uniqueName);
   },
 });
 
-// Configure multer for memory storage
-const upload = multer({ 
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    cb(null, allowed.includes(file.mimetype));
+  },
 });
 
-// Upload document
 router.post('/upload', authMiddleware, upload.single('document'), async (req, res) => {
   try {
     const { type } = req.body;
     const file = req.file;
-    
-    if (!file) {
-      return res.status(400).json({ success: false, message: 'No file uploaded' });
-    }
-    
-    // Upload to S3
-    const key = `documents/${req.userId}/${type}/${Date.now()}_${file.originalname}`;
-    
-    const command = new PutObjectCommand({
-      Bucket: process.env.S3_BUCKET,
-      Key: key,
-      Body: file.buffer,
-      ContentType: file.mimetype,
-    });
-    
-    await s3Client.send(command);
-    
-    const fileUrl = `https://${process.env.S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
-    
-    // Save document record
+    if (!file) return res.status(400).json({ success: false, message: 'No file uploaded' });
+
     const document = new Document({
       userId: req.userId,
       type,
       name: file.originalname,
-      url: fileUrl,
+      url: `/uploads/${req.userId}/${file.filename}`,
       size: file.size,
       mimeType: file.mimetype,
-      uploadedAt: new Date(),
     });
-    
+
     await document.save();
-    
-    // Update user documents
-    await User.findByIdAndUpdate(req.userId, {
-      $set: { [`documents.${type}`]: fileUrl },
-    });
-    
-    res.json({ 
-      success: true, 
-      document: {
-        id: document._id,
-        name: document.name,
-        url: document.url,
-      },
-      message: 'Document uploaded successfully' 
-    });
+    await User.findByIdAndUpdate(req.userId, { $set: { [`documents.${type}`]: document.url } });
+
+    res.json({ success: true, document: { id: document._id, name: document.name, url: document.url, type: document.type } });
   } catch (error) {
-    console.error('Upload error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// Get user documents
 router.get('/', authMiddleware, async (req, res) => {
-  try {
-    const documents = await Document.find({ userId: req.userId });
-    
-    const docsByType = {};
-    documents.forEach(doc => {
-      if (!docsByType[doc.type]) {
-        docsByType[doc.type] = [];
-      }
-      docsByType[doc.type].push({
-        id: doc._id,
-        name: doc.name,
-        url: doc.url,
-        uploadedAt: doc.uploadedAt,
-      });
-    });
-    
-    res.json({ success: true, documents: docsByType });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
+  const docs = await Document.find({ userId: req.userId });
+  const byType = {};
+  docs.forEach(d => {
+    if (!byType[d.type]) byType[d.type] = [];
+    byType[d.type].push({ id: d._id, name: d.name, url: d.url, uploadedAt: d.uploadedAt });
+  });
+  res.json({ success: true, documents: byType });
 });
 
-// Delete document
 router.delete('/:id', authMiddleware, async (req, res) => {
-  try {
-    const document = await Document.findOneAndDelete({
-      _id: req.params.id,
-      userId: req.userId,
-    });
-    
-    if (!document) {
-      return res.status(404).json({ success: false, message: 'Document not found' });
-    }
-    
-    // Remove from user documents
-    await User.findByIdAndUpdate(req.userId, {
-      $unset: { [`documents.${document.type}`]: '' },
-    });
-    
-    res.json({ success: true, message: 'Document deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
+  const doc = await Document.findOneAndDelete({ _id: req.params.id, userId: req.userId });
+  if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
+  const fp = path.join(__dirname, '..', doc.url);
+  if (fs.existsSync(fp)) fs.unlinkSync(fp);
+  res.json({ success: true });
 });
 
 module.exports = router;
