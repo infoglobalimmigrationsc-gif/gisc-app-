@@ -10,13 +10,11 @@ import {
   ActivityIndicator,
   Modal,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../../components/Icon';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
-
-const API_URL = 'https://api.gisc-liberia.com/api';
+import api from '../../services/api';
 
 const DOCUMENT_TYPES = [
   {
@@ -26,7 +24,7 @@ const DOCUMENT_TYPES = [
     icon: 'id-card-outline',
     required: true,
     acceptedTypes: ['image/*', 'application/pdf'],
-    maxSize: 5, // MB
+    maxSize: 5,
   },
   {
     id: 'certificates',
@@ -81,26 +79,26 @@ const DocumentUploadScreen = ({ navigation }) => {
   }, []);
 
   const requestPermissions = async () => {
-    const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
-    const { status: mediaStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
-    if (cameraStatus !== 'granted' || mediaStatus !== 'granted') {
-      Alert.alert('Permissions Required', 'Please grant camera and storage permissions to upload documents.');
+    try {
+      const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
+      const { status: mediaStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (cameraStatus !== 'granted' || mediaStatus !== 'granted') {
+        Alert.alert('Permissions Required', 'Please grant camera and storage permissions to upload documents.');
+      }
+    } catch (error) {
+      // Permissions not available in Expo Go - continue anyway
     }
   };
 
   const loadExistingDocuments = async () => {
     try {
-      const token = await AsyncStorage.getItem('gisc_token');
-      const response = await axios.get(`${API_URL}/documents`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.data.success) {
+      const response = await api.get('/documents');
+      if (response.data?.success && response.data.documents) {
         setDocuments(response.data.documents);
       }
     } catch (error) {
-      console.error('Error loading documents:', error);
+      // No documents yet - that's fine
     }
   };
 
@@ -145,15 +143,10 @@ const DocumentUploadScreen = ({ navigation }) => {
 
       if (!result.canceled && result.assets) {
         for (const asset of result.assets) {
-          // Check file size
           if (asset.size > docConfig.maxSize * 1024 * 1024) {
-            Alert.alert(
-              'File Too Large',
-              `Maximum file size is ${docConfig.maxSize}MB`
-            );
+            Alert.alert('File Too Large', `Maximum file size is ${docConfig.maxSize}MB`);
             continue;
           }
-          
           await uploadDocument(docType, asset);
         }
       }
@@ -169,17 +162,14 @@ const DocumentUploadScreen = ({ navigation }) => {
     const formData = new FormData();
     formData.append('document', {
       uri: file.uri,
-      type: file.mimeType || 'application/octet-stream',
-      name: file.name || `document_${Date.now()}`,
+      type: file.mimeType || 'image/jpeg',
+      name: file.fileName || file.name || `document_${Date.now()}.jpg`,
     });
     formData.append('type', docType);
 
     try {
-      const token = await AsyncStorage.getItem('gisc_token');
-      
-      const response = await axios.post(`${API_URL}/documents/upload`, formData, {
+      const response = await api.post('/documents/upload', formData, {
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data',
         },
         onUploadProgress: (progressEvent) => {
@@ -188,22 +178,39 @@ const DocumentUploadScreen = ({ navigation }) => {
           );
           setUploadProgress({ ...uploadProgress, [docType]: percentCompleted });
         },
+        timeout: 60000, // 60 seconds for large files
       });
 
-      if (response.data.success) {
-        setDocuments({
-          ...documents,
-          [docType]: response.data.document,
+      if (response.data?.success) {
+        // Add document to local state
+        const uploadedDoc = response.data.document;
+        setDocuments(prev => {
+          const existing = prev[docType];
+          if (docType === 'certificates' && Array.isArray(existing)) {
+            return { ...prev, [docType]: [...existing, uploadedDoc] };
+          }
+          return { ...prev, [docType]: uploadedDoc };
         });
         
         Alert.alert('Success', 'Document uploaded successfully!');
+      } else {
+        Alert.alert('Upload Failed', response.data?.message || 'Server error. Please try again.');
       }
     } catch (error) {
-      Alert.alert('Upload Failed', error.response?.data?.message || 'Please try again.');
+      console.error('Upload error:', error);
+      
+      // Check if it's a network error vs server error
+      if (error.response) {
+        Alert.alert('Upload Failed', `Server error: ${error.response.status}. Please try again.`);
+      } else if (error.request) {
+        Alert.alert('Network Error', 'Cannot reach the server. Check your internet connection and try again.');
+      } else {
+        Alert.alert('Upload Failed', 'An unexpected error occurred. Please try again.');
+      }
     } finally {
       setUploading(false);
       setCurrentUpload(null);
-      setUploadProgress({ ...uploadProgress, [docType]: 0 });
+      setUploadProgress(prev => ({ ...prev, [docType]: 0 }));
     }
   };
 
@@ -218,25 +225,27 @@ const DocumentUploadScreen = ({ navigation }) => {
           style: 'destructive',
           onPress: async () => {
             try {
-              const token = await AsyncStorage.getItem('gisc_token');
               const docId = Array.isArray(documents[docType]) 
                 ? documents[docType][docIndex]?.id 
                 : documents[docType]?.id;
 
-              await axios.delete(`${API_URL}/documents/${docId}`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
+              if (docId) {
+                await api.delete(`/documents/${docId}`);
+              }
 
               if (Array.isArray(documents[docType])) {
-                const newDocs = documents[docType].filter((_, i) => i !== docIndex);
-                setDocuments({ ...documents, [docType]: newDocs });
+                const newDocs = [...documents[docType]];
+                newDocs.splice(docIndex, 1);
+                setDocuments(prev => ({ ...prev, [docType]: newDocs }));
               } else {
-                const newDocs = { ...documents };
-                delete newDocs[docType];
-                setDocuments(newDocs);
+                setDocuments(prev => {
+                  const newDocs = { ...prev };
+                  delete newDocs[docType];
+                  return newDocs;
+                });
               }
             } catch (error) {
-              Alert.alert('Error', 'Failed to delete document.');
+              Alert.alert('Error', 'Failed to delete document. Please try again.');
             }
           },
         },
@@ -261,11 +270,11 @@ const DocumentUploadScreen = ({ navigation }) => {
     const isRequired = DOCUMENT_TYPES.find(d => d.id === docType)?.required;
     
     if (status === 'uploaded') {
-      return <Ionicons name="checkmark-circle" size={22} color="#27AE60" />;
+      return <Icon name="checkmark-circle" size={22} color="#27AE60" />;
     } else if (isRequired) {
-      return <Ionicons name="alert-circle" size={22} color="#E74C3C" />;
+      return <Icon name="alert-circle" size={22} color="#E74C3C" />;
     } else {
-      return <Ionicons name="time-outline" size={22} color="#F39C12" />;
+      return <Icon name="time-outline" size={22} color="#F39C12" />;
     }
   };
 
@@ -280,16 +289,14 @@ const DocumentUploadScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#1E3A5F" />
+          <Icon name="arrow-back" size={24} color="#1a3a5c" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Documents</Text>
         <View style={{ width: 24 }} />
       </View>
 
-      {/* Progress Bar */}
       <View style={styles.progressContainer}>
         <View style={styles.progressHeader}>
           <Text style={styles.progressLabel}>Upload Progress</Text>
@@ -316,7 +323,7 @@ const DocumentUploadScreen = ({ navigation }) => {
             <View key={docType.id} style={styles.documentCard}>
               <View style={styles.documentHeader}>
                 <View style={styles.documentIconContainer}>
-                  <Ionicons name={docType.icon} size={24} color="#1E3A5F" />
+                  <Icon name={docType.icon} size={24} color="#1a3a5c" />
                 </View>
                 <View style={styles.documentInfo}>
                   <View style={styles.documentTitleRow}>
@@ -329,13 +336,12 @@ const DocumentUploadScreen = ({ navigation }) => {
                   </View>
                   <Text style={styles.documentDescription}>{docType.description}</Text>
                   <Text style={styles.documentRequirements}>
-                    Max size: {docType.maxSize}MB • {docType.acceptedTypes.join(', ')}
+                    Max size: {docType.maxSize}MB
                   </Text>
                 </View>
                 {getStatusIcon(docType.id)}
               </View>
 
-              {/* Uploaded Files */}
               {status === 'uploaded' && (
                 <View style={styles.uploadedFiles}>
                   {Array.isArray(uploadedDoc) ? (
@@ -345,13 +351,13 @@ const DocumentUploadScreen = ({ navigation }) => {
                           style={styles.fileInfo}
                           onPress={() => handlePreview(file.url)}
                         >
-                          <Ionicons name="document-text" size={20} color="#5A7D9C" />
+                          <Icon name="document-text" size={20} color="#888888" />
                           <Text style={styles.fileName} numberOfLines={1}>
                             {file.name || `Document ${index + 1}`}
                           </Text>
                         </TouchableOpacity>
                         <TouchableOpacity onPress={() => handleDeleteDocument(docType.id, index)}>
-                          <Ionicons name="trash-outline" size={20} color="#E74C3C" />
+                          <Icon name="trash-outline" size={20} color="#E74C3C" />
                         </TouchableOpacity>
                       </View>
                     ))
@@ -361,20 +367,19 @@ const DocumentUploadScreen = ({ navigation }) => {
                         style={styles.fileInfo}
                         onPress={() => handlePreview(uploadedDoc.url)}
                       >
-                        <Ionicons name="document-text" size={20} color="#5A7D9C" />
+                        <Icon name="document-text" size={20} color="#888888" />
                         <Text style={styles.fileName} numberOfLines={1}>
                           {uploadedDoc.name || 'Uploaded Document'}
                         </Text>
                       </TouchableOpacity>
                       <TouchableOpacity onPress={() => handleDeleteDocument(docType.id, 0)}>
-                        <Ionicons name="trash-outline" size={20} color="#E74C3C" />
+                        <Icon name="trash-outline" size={20} color="#E74C3C" />
                       </TouchableOpacity>
                     </View>
                   )}
                 </View>
               )}
 
-              {/* Upload Button / Progress */}
               {isUploading ? (
                 <View style={styles.uploadProgress}>
                   <View style={styles.progressBarSmall}>
@@ -384,16 +389,13 @@ const DocumentUploadScreen = ({ navigation }) => {
                 </View>
               ) : (
                 <TouchableOpacity
-                  style={[
-                    styles.uploadButton,
-                    docType.multiple && status === 'uploaded' && styles.uploadButtonSecondary,
-                  ]}
+                  style={styles.uploadButton}
                   onPress={() => handleSelectDocument(docType.id)}
                 >
-                  <Ionicons 
+                  <Icon 
                     name={status === 'uploaded' && !docType.multiple ? 'checkmark' : 'cloud-upload-outline'} 
                     size={18} 
-                    color={status === 'uploaded' && !docType.multiple ? '#27AE60' : '#1E3A5F'} 
+                    color={status === 'uploaded' && !docType.multiple ? '#27AE60' : '#1a3a5c'} 
                   />
                   <Text style={[
                     styles.uploadButtonText,
@@ -409,30 +411,22 @@ const DocumentUploadScreen = ({ navigation }) => {
           );
         })}
 
-        {/* Important Notes */}
         <View style={styles.notesContainer}>
           <Text style={styles.notesTitle}>Important Notes</Text>
           <View style={styles.noteItem}>
-            <Ionicons name="information-circle" size={16} color="#F39C12" />
-            <Text style={styles.noteText}>
-              All documents must be clear and legible
-            </Text>
+            <Icon name="information-circle" size={16} color="#F39C12" />
+            <Text style={styles.noteText}>All documents must be clear and legible</Text>
           </View>
           <View style={styles.noteItem}>
-            <Ionicons name="information-circle" size={16} color="#F39C12" />
-            <Text style={styles.noteText}>
-              Maximum file size per document: {DOCUMENT_TYPES.map(d => `${d.label}: ${d.maxSize}MB`).join(', ')}
-            </Text>
+            <Icon name="information-circle" size={16} color="#F39C12" />
+            <Text style={styles.noteText}>Accepted formats: PDF, JPG, PNG, DOC, DOCX</Text>
           </View>
           <View style={styles.noteItem}>
-            <Ionicons name="information-circle" size={16} color="#F39C12" />
-            <Text style={styles.noteText}>
-              Accepted formats: PDF, JPG, PNG, DOC, DOCX
-            </Text>
+            <Icon name="information-circle" size={16} color="#F39C12" />
+            <Text style={styles.noteText}>Maximum 10MB per document</Text>
           </View>
         </View>
 
-        {/* Submit Button */}
         <TouchableOpacity
           style={[
             styles.submitButton,
@@ -442,8 +436,8 @@ const DocumentUploadScreen = ({ navigation }) => {
             if (calculateCompletion() === 100) {
               Alert.alert(
                 'Documents Complete',
-                'All required documents have been uploaded. Your application will now move to review.',
-                [{ text: 'Continue', onPress: () => navigation.navigate('ApplicationTracker') }]
+                'All required documents have been uploaded.',
+                [{ text: 'Continue', onPress: () => navigation.goBack() }]
               );
             } else {
               Alert.alert(
@@ -454,12 +448,11 @@ const DocumentUploadScreen = ({ navigation }) => {
           }}
         >
           <Text style={styles.submitButtonText}>
-            {calculateCompletion() === 100 ? 'Submit Documents' : 'Upload All Required Documents'}
+            {calculateCompletion() === 100 ? 'All Documents Uploaded' : 'Upload All Required Documents'}
           </Text>
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Preview Modal */}
       <Modal
         visible={showPreview}
         transparent={true}
@@ -470,11 +463,10 @@ const DocumentUploadScreen = ({ navigation }) => {
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Document Preview</Text>
             <TouchableOpacity onPress={() => setShowPreview(false)}>
-              <Ionicons name="close" size={24} color="#1E3A5F" />
+              <Icon name="close" size={24} color="#1a3a5c" />
             </TouchableOpacity>
           </View>
           <View style={styles.modalContent}>
-            {/* Document preview would be rendered here */}
             <Text style={styles.previewPlaceholder}>Document Preview</Text>
           </View>
         </View>
@@ -484,264 +476,88 @@ const DocumentUploadScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E8EEF5',
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16,
+    borderBottomWidth: 1, borderBottomColor: '#E8EEF5',
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1E3A5F',
-  },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: '#1a3a5c' },
   progressContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FAFCFE',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E8EEF5',
+    paddingHorizontal: 20, paddingVertical: 16, backgroundColor: '#FAFCFE',
+    borderBottomWidth: 1, borderBottomColor: '#E8EEF5',
   },
   progressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8,
   },
-  progressLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1E3A5F',
-  },
-  progressPercent: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#27AE60',
-  },
-  progressBar: {
-    height: 6,
-    backgroundColor: '#E8EEF5',
-    borderRadius: 3,
-  },
-  progressFill: {
-    height: 6,
-    backgroundColor: '#27AE60',
-    borderRadius: 3,
-  },
-  scrollView: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1E3A5F',
-    marginTop: 20,
-    marginBottom: 4,
-  },
-  sectionSubtitle: {
-    fontSize: 13,
-    color: '#8AA0B8',
-    marginBottom: 20,
-  },
+  progressLabel: { fontSize: 14, fontWeight: '500', color: '#1a3a5c' },
+  progressPercent: { fontSize: 14, fontWeight: '600', color: '#27AE60' },
+  progressBar: { height: 6, backgroundColor: '#E8EEF5', borderRadius: 3 },
+  progressFill: { height: 6, backgroundColor: '#27AE60', borderRadius: 3 },
+  scrollView: { flex: 1, paddingHorizontal: 20 },
+  sectionTitle: { fontSize: 18, fontWeight: '600', color: '#1a3a5c', marginTop: 20, marginBottom: 4 },
+  sectionSubtitle: { fontSize: 13, color: '#888888', marginBottom: 20 },
   documentCard: {
-    backgroundColor: '#FAFCFE',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#E8EEF5',
+    backgroundColor: '#FAFCFE', borderRadius: 16, padding: 16,
+    marginBottom: 16, borderWidth: 1, borderColor: '#E8EEF5',
   },
-  documentHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
+  documentHeader: { flexDirection: 'row', alignItems: 'flex-start' },
   documentIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#EBF3FA',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
+    width: 44, height: 44, borderRadius: 12, backgroundColor: '#EBF3FA',
+    justifyContent: 'center', alignItems: 'center', marginRight: 14,
   },
-  documentInfo: {
-    flex: 1,
-  },
-  documentTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  documentTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#1E3A5F',
-    marginRight: 8,
-  },
+  documentInfo: { flex: 1 },
+  documentTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  documentTitle: { fontSize: 16, fontWeight: '500', color: '#1a3a5c', marginRight: 8 },
   requiredBadge: {
-    backgroundColor: '#E74C3C',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
+    backgroundColor: '#cc2936', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10,
   },
-  requiredText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  documentDescription: {
-    fontSize: 13,
-    color: '#5A7D9C',
-    marginBottom: 4,
-  },
-  documentRequirements: {
-    fontSize: 11,
-    color: '#8AA0B8',
-  },
+  requiredText: { fontSize: 10, fontWeight: '600', color: '#FFFFFF' },
+  documentDescription: { fontSize: 13, color: '#888888', marginBottom: 4 },
+  documentRequirements: { fontSize: 11, color: '#aaaaaa' },
   uploadedFiles: {
-    marginTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: '#E8EEF5',
-    paddingTop: 14,
+    marginTop: 14, borderTopWidth: 1, borderTopColor: '#E8EEF5', paddingTop: 14,
   },
   fileItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#E8EEF5',
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: '#FFFFFF', borderRadius: 10, padding: 12, marginBottom: 8,
+    borderWidth: 1, borderColor: '#E8EEF5',
   },
-  fileInfo: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  fileName: {
-    fontSize: 14,
-    color: '#1E3A5F',
-    marginLeft: 10,
-  },
+  fileInfo: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  fileName: { fontSize: 14, color: '#1a3a5c', marginLeft: 10 },
   uploadButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#EBF3FA',
-    borderRadius: 10,
-    paddingVertical: 12,
-    marginTop: 14,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#EBF3FA', borderRadius: 10, paddingVertical: 12, marginTop: 14,
   },
-  uploadButtonSecondary: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#1E3A5F',
-  },
-  uploadButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1E3A5F',
-    marginLeft: 8,
-  },
-  uploadProgress: {
-    marginTop: 14,
-  },
-  progressBarSmall: {
-    height: 4,
-    backgroundColor: '#E8EEF5',
-    borderRadius: 2,
-    marginBottom: 6,
-  },
-  progressFillSmall: {
-    height: 4,
-    backgroundColor: '#1E3A5F',
-    borderRadius: 2,
-  },
-  progressText: {
-    fontSize: 12,
-    color: '#5A7D9C',
-    textAlign: 'center',
-  },
+  uploadButtonText: { fontSize: 14, fontWeight: '500', color: '#1a3a5c', marginLeft: 8 },
+  uploadProgress: { marginTop: 14 },
+  progressBarSmall: { height: 4, backgroundColor: '#E8EEF5', borderRadius: 2, marginBottom: 6 },
+  progressFillSmall: { height: 4, backgroundColor: '#1a3a5c', borderRadius: 2 },
+  progressText: { fontSize: 12, color: '#888888', textAlign: 'center' },
   notesContainer: {
-    backgroundColor: '#FEF9E7',
-    borderRadius: 12,
-    padding: 16,
-    marginVertical: 20,
+    backgroundColor: '#FEF9E7', borderRadius: 12, padding: 16, marginVertical: 20,
   },
-  notesTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1E3A5F',
-    marginBottom: 12,
-  },
-  noteItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 10,
-  },
-  noteText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#5A7D9C',
-    marginLeft: 10,
-    lineHeight: 18,
-  },
+  notesTitle: { fontSize: 15, fontWeight: '600', color: '#1a3a5c', marginBottom: 12 },
+  noteItem: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
+  noteText: { flex: 1, fontSize: 13, color: '#666666', marginLeft: 10, lineHeight: 18 },
   submitButton: {
-    backgroundColor: '#27AE60',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginBottom: 30,
+    backgroundColor: '#cc2936', borderRadius: 12, paddingVertical: 16,
+    alignItems: 'center', marginBottom: 30,
   },
-  submitButtonDisabled: {
-    backgroundColor: '#8AA0B8',
-  },
-  submitButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
+  submitButtonDisabled: { backgroundColor: '#c0c0c0' },
+  submitButtonText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
   modalContainer: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    marginTop: 60,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    flex: 1, backgroundColor: '#FFFFFF', marginTop: 60,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
   },
   modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E8EEF5',
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 20, paddingVertical: 16,
+    borderBottomWidth: 1, borderBottomColor: '#E8EEF5',
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1E3A5F',
-  },
-  modalContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  previewPlaceholder: {
-    fontSize: 16,
-    color: '#8AA0B8',
-  },
+  modalTitle: { fontSize: 18, fontWeight: '600', color: '#1a3a5c' },
+  modalContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  previewPlaceholder: { fontSize: 16, color: '#aaaaaa' },
 });
 
 export default DocumentUploadScreen;
