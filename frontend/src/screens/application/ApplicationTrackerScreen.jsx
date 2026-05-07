@@ -1,50 +1,41 @@
 // frontend/src/screens/application/ApplicationTrackerScreen.jsx
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../services/api';
-import Icon from '../../components/Icon';
 
-const STATUS_STEPS = [
-  { id: 'registered', label: 'Application Registered', description: 'Your application has been received', color: '#27AE60' },
-  { id: 'docs_submitted', label: 'Documents Submitted', description: 'All required documents uploaded', color: '#F39C12' },
-  { id: 'under_review', label: 'Under Review', description: 'Counselor reviewing your profile', color: '#3498DB' },
-  { id: 'applied', label: 'Applied to University', description: 'Application submitted to institution', color: '#9B59B6' },
-  { id: 'admission_received', label: 'Admission Received', description: 'Congratulations! Offer letter available', color: '#27AE60' },
-  { id: 'visa_processing', label: 'Visa Processing', description: 'Visa application in progress', color: '#E67E22' },
+const STEPS = [
+  { id: 'registered', label: 'Application Registered', color: '#F39C12' },
+  { id: 'docs_submitted', label: 'Documents Submitted', color: '#3b82f6' },
+  { id: 'under_review', label: 'Under Review', color: '#9B59B6' },
+  { id: 'applied', label: 'Applied to University', color: '#3b82f6' },
+  { id: 'admission_received', label: 'Admission Received', color: '#27AE60' },
+  { id: 'visa_processing', label: 'Visa Processing', color: '#cc2936' },
 ];
 
 const ApplicationTrackerScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [application, setApplication] = useState(null);
   const [currentStatus, setCurrentStatus] = useState('registered');
+  const [application, setApplication] = useState(null);
 
-  useEffect(() => { loadApplicationStatus(); }, []);
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await api.get('/application/status');
+        if (res.data?.success) {
+          setApplication(res.data.application);
+          setCurrentStatus(res.data.application?.status || 'registered');
+        }
+      } catch (error) {} finally { setLoading(false); }
+    };
+    load();
+  }, []);
 
-  const loadApplicationStatus = async () => {
-    try {
-      const response = await api.get('/application/status');
-      if (response.data.success) {
-        setApplication(response.data.application);
-        setCurrentStatus(response.data.application?.status || 'registered');
-      }
-    } catch (error) {} finally {
-      setLoading(false); setRefreshing(false);
-    }
-  };
-
-  const onRefresh = () => { setRefreshing(true); loadApplicationStatus(); };
-  const currentStepIndex = STATUS_STEPS.findIndex(step => step.id === currentStatus);
+  const currentIndex = STEPS.findIndex(s => s.id === currentStatus);
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1a3a5c" />
-      </View>
-    );
+    return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#cc2936" /></View>;
   }
 
   return (
@@ -57,79 +48,51 @@ const ApplicationTrackerScreen = ({ navigation }) => {
         <View style={{ width: 50 }} />
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
-        {/* Application ID Card */}
+      <ScrollView style={styles.scrollView}>
+        {/* ID Card */}
         <View style={styles.idCard}>
-          <Text style={styles.idLabel}>Application ID</Text>
+          <Text style={styles.idLabel}>APPLICATION ID</Text>
           <Text style={styles.idValue}>{application?.applicationId || 'GISC-2026-0001'}</Text>
-          <Text style={styles.idDate}>Submitted: April 22, 2026</Text>
         </View>
 
-        {/* Current Status */}
-        <View style={[styles.statusBanner, { backgroundColor: STATUS_STEPS[currentStepIndex]?.color + '14' }]}>
-          <View style={[styles.statusIconCircle, { backgroundColor: STATUS_STEPS[currentStepIndex]?.color }]}>
-            <Text style={styles.statusIconText}>{currentStepIndex + 1}</Text>
+        {/* Progress Percentage */}
+        <View style={styles.percentageCard}>
+          <Text style={styles.percentageLabel}>Overall Progress</Text>
+          <View style={styles.percentageBarContainer}>
+            <View style={[styles.percentageBar, { width: `${Math.round(((currentIndex + 1) / STEPS.length) * 100)}%` }]} />
           </View>
-          <View style={styles.statusInfo}>
-            <Text style={[styles.statusTitle, { color: STATUS_STEPS[currentStepIndex]?.color }]}>
-              {STATUS_STEPS[currentStepIndex]?.label}
-            </Text>
-            <Text style={styles.statusDesc}>{STATUS_STEPS[currentStepIndex]?.description}</Text>
-          </View>
+          <Text style={styles.percentageText}>{Math.round(((currentIndex + 1) / STEPS.length) * 100)}% Complete</Text>
         </View>
 
-        {/* Timeline */}
+        {/* Stepper */}
         <View style={styles.timelineSection}>
-          <Text style={styles.timelineTitle}>Progress Timeline</Text>
-          {STATUS_STEPS.map((step, index) => {
-            const completed = index <= currentStepIndex;
-            const active = index === currentStepIndex;
+          <Text style={styles.timelineTitle}>Application Timeline</Text>
+          {STEPS.map((step, index) => {
+            const completed = index <= currentIndex;
+            const active = index === currentIndex;
             return (
               <View key={step.id} style={styles.timelineItem}>
+                {/* Vertical Line */}
                 <View style={styles.timelineLeft}>
                   <View style={[styles.timelineDot, completed && { backgroundColor: step.color }, active && styles.timelineDotActive]} />
-                  {index < STATUS_STEPS.length - 1 && (
-                    <View style={[styles.timelineLine, index < currentStepIndex && { backgroundColor: step.color }]} />
+                  {index < STEPS.length - 1 && (
+                    <View style={[styles.timelineLine, index < currentIndex && { backgroundColor: '#3b82f6' }]} />
                   )}
                 </View>
-                <View style={[styles.timelineRight, active && styles.timelineRightActive]}>
+                {/* Content */}
+                <View style={styles.timelineRight}>
                   <Text style={[styles.timelineStepLabel, completed && { color: step.color }]}>{step.label}</Text>
-                  <Text style={styles.timelineStepDesc}>{step.description}</Text>
+                  {active && <Text style={styles.timelineCurrent}>● Current Stage</Text>}
                 </View>
               </View>
             );
           })}
         </View>
 
-        {/* Estimate */}
-        <View style={styles.estimateCard}>
-          <Text style={styles.estimateTitle}>Estimated Timeline</Text>
-          <View style={styles.estimateRow}>
-            <Text style={styles.estimateLabel}>Document Review</Text>
-            <Text style={styles.estimateValue}>1-2 business days</Text>
-          </View>
-          <View style={styles.estimateRow}>
-            <Text style={styles.estimateLabel}>University Application</Text>
-            <Text style={styles.estimateValue}>2-4 weeks</Text>
-          </View>
-          <View style={styles.estimateRow}>
-            <Text style={styles.estimateLabel}>Admission Decision</Text>
-            <Text style={styles.estimateValue}>4-8 weeks</Text>
-          </View>
-          <View style={styles.estimateRow}>
-            <Text style={styles.estimateLabel}>Visa Processing</Text>
-            <Text style={styles.estimateValue}>2-4 weeks</Text>
-          </View>
-        </View>
-
         {/* Actions */}
-        <TouchableOpacity style={styles.contactButton} onPress={() => navigation.navigate('Chat')}>
-          <Text style={styles.contactButtonText}>Contact Your Counselor</Text>
+        <TouchableOpacity style={styles.actionButton} onPress={() => navigation.navigate('Chat')}>
+          <Text style={styles.actionButtonText}>Contact Counselor</Text>
         </TouchableOpacity>
-
         <View style={{ height: 30 }} />
       </ScrollView>
     </View>
@@ -140,37 +103,29 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#ffffff' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  backButton: { fontSize: 16, color: '#1a3a5c', fontWeight: '500' },
-  headerTitle: { fontSize: 18, fontWeight: '600', color: '#1a3a5c' },
+  backButton: { fontSize: 16, color: '#1a1a2e', fontWeight: '500' },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: '#1a1a2e' },
   scrollView: { flex: 1, paddingHorizontal: 20 },
-  idCard: { backgroundColor: '#1a3a5c', borderRadius: 18, padding: 22, marginTop: 20, marginBottom: 18 },
-  idLabel: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 },
+  idCard: { backgroundColor: '#cc2936', borderRadius: 18, padding: 22, marginTop: 20, marginBottom: 16 },
+  idLabel: { fontSize: 11, color: 'rgba(255,255,255,0.6)', letterSpacing: 2, marginBottom: 6 },
   idValue: { fontSize: 24, fontWeight: 'bold', color: '#ffffff', letterSpacing: 1 },
-  idDate: { fontSize: 13, color: 'rgba(255,255,255,0.6)', marginTop: 10 },
-  statusBanner: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, padding: 18, marginBottom: 24 },
-  statusIconCircle: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
-  statusIconText: { fontSize: 20, fontWeight: 'bold', color: '#ffffff' },
-  statusInfo: { flex: 1 },
-  statusTitle: { fontSize: 18, fontWeight: '600', marginBottom: 4 },
-  statusDesc: { fontSize: 13, color: '#888888' },
+  percentageCard: { backgroundColor: '#f8fafc', borderRadius: 16, padding: 18, marginBottom: 24, borderWidth: 1, borderColor: '#e0e0e0' },
+  percentageLabel: { fontSize: 14, fontWeight: '500', color: '#1a1a2e', marginBottom: 10 },
+  percentageBarContainer: { height: 8, backgroundColor: '#e0e0e0', borderRadius: 4, marginBottom: 8 },
+  percentageBar: { height: 8, backgroundColor: '#cc2936', borderRadius: 4 },
+  percentageText: { fontSize: 13, fontWeight: '600', color: '#cc2936', textAlign: 'right' },
   timelineSection: { marginBottom: 24 },
-  timelineTitle: { fontSize: 18, fontWeight: '600', color: '#1a3a5c', marginBottom: 22 },
-  timelineItem: { flexDirection: 'row', marginBottom: 24 },
-  timelineLeft: { alignItems: 'center', marginRight: 16, width: 28 },
-  timelineDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#e0e0e0' },
-  timelineDotActive: { width: 18, height: 18, borderRadius: 9, borderWidth: 3, borderColor: '#ffffff', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3 },
-  timelineLine: { width: 2, flex: 1, backgroundColor: '#e0e0e0', marginVertical: 4 },
-  timelineRight: { flex: 1, paddingBottom: 4 },
-  timelineRightActive: {},
-  timelineStepLabel: { fontSize: 15, fontWeight: '600', color: '#888888', marginBottom: 4 },
-  timelineStepDesc: { fontSize: 12, color: '#aaaaaa' },
-  estimateCard: { backgroundColor: '#f8fafc', borderRadius: 16, padding: 18, marginBottom: 24, borderWidth: 1, borderColor: '#e8eef5' },
-  estimateTitle: { fontSize: 15, fontWeight: '600', color: '#1a3a5c', marginBottom: 14 },
-  estimateRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  estimateLabel: { fontSize: 13, color: '#666666' },
-  estimateValue: { fontSize: 13, fontWeight: '500', color: '#1a3a5c' },
-  contactButton: { backgroundColor: '#cc2936', borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginBottom: 10 },
-  contactButtonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
+  timelineTitle: { fontSize: 18, fontWeight: '600', color: '#1a1a2e', marginBottom: 22 },
+  timelineItem: { flexDirection: 'row', marginBottom: 28 },
+  timelineLeft: { alignItems: 'center', marginRight: 16, width: 24 },
+  timelineDot: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#e0e0e0' },
+  timelineDotActive: { width: 22, height: 22, borderRadius: 11, borderWidth: 4, borderColor: '#cc2936', backgroundColor: '#ffffff' },
+  timelineLine: { width: 2, flex: 1, backgroundColor: '#e0e0e0' },
+  timelineRight: { flex: 1, paddingTop: 2 },
+  timelineStepLabel: { fontSize: 15, fontWeight: '600', color: '#888888' },
+  timelineCurrent: { fontSize: 11, color: '#cc2936', marginTop: 4 },
+  actionButton: { backgroundColor: '#cc2936', borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
+  actionButtonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
 });
 
 export default ApplicationTrackerScreen;
