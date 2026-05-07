@@ -9,11 +9,9 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../../components/Icon';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
-
-const API_URL = 'https://api.gisc-liberia.com/api';
+import api from '../../services/api';
 
 const ApplicationLockScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
@@ -27,17 +25,15 @@ const ApplicationLockScreen = ({ navigation }) => {
 
   const checkApplicationAccess = async () => {
     try {
-      const token = await AsyncStorage.getItem('gisc_token');
-      const response = await axios.get(`${API_URL}/application/check-access`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await api.get('/application/check-access');
       
-      if (response.data.hasAccess) {
+      if (response.data?.hasAccess) {
         setHasAccess(true);
         navigation.replace('ApplicationForm');
       }
     } catch (error) {
-      console.error('Error checking access:', error);
+      // No access yet - user needs to pay
+      console.log('Application not yet unlocked');
     } finally {
       setCheckingAccess(false);
     }
@@ -46,29 +42,23 @@ const ApplicationLockScreen = ({ navigation }) => {
   const handlePayment = async () => {
     setLoading(true);
     try {
-      const token = await AsyncStorage.getItem('gisc_token');
+      const response = await api.post('/payment/initiate', {
+        amount: 10,
+        type: 'application_fee',
+        paymentMethod: selectedPaymentMethod,
+      });
       
-      // Initiate payment
-      const response = await axios.post(
-        `${API_URL}/payment/initiate`,
-        {
-          amount: 10,
-          type: 'application_fee',
-          paymentMethod: selectedPaymentMethod,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      
-      if (response.data.success) {
-        // Navigate to payment processing screen
+      if (response.data?.success) {
         navigation.navigate('PaymentProcessing', {
           transactionId: response.data.transactionId,
           amount: 10,
           paymentMethod: selectedPaymentMethod,
         });
+      } else {
+        Alert.alert('Error', 'Unable to initiate payment. Please try again.');
       }
     } catch (error) {
-      Alert.alert('Payment Failed', 'Unable to initiate payment. Please try again.');
+      Alert.alert('Payment Failed', 'Cannot connect to payment server. Check your internet connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -77,7 +67,7 @@ const ApplicationLockScreen = ({ navigation }) => {
   if (checkingAccess) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1E3A5F" />
+        <ActivityIndicator size="large" color="#1a3a5c" />
         <Text style={styles.loadingText}>Checking access...</Text>
       </View>
     );
@@ -90,13 +80,13 @@ const ApplicationLockScreen = ({ navigation }) => {
         style={styles.backButton}
         onPress={() => navigation.goBack()}
       >
-        <Ionicons name="arrow-back" size={24} color="#1E3A5F" />
+        <Text style={styles.backArrow}>←</Text>
       </TouchableOpacity>
 
       {/* Lock Icon */}
       <View style={styles.lockIconContainer}>
         <View style={styles.lockIcon}>
-          <Ionicons name="lock-closed" size={40} color="#FFFFFF" />
+          <Text style={styles.lockEmoji}>🔒</Text>
         </View>
       </View>
 
@@ -111,27 +101,27 @@ const ApplicationLockScreen = ({ navigation }) => {
         <Text style={styles.featuresTitle}>What's Included:</Text>
         
         <View style={styles.featureItem}>
-          <Ionicons name="checkmark-circle" size={20} color="#27AE60" />
+          <Text style={styles.featureCheck}>✓</Text>
           <Text style={styles.featureText}>Full application form access</Text>
         </View>
         
         <View style={styles.featureItem}>
-          <Ionicons name="checkmark-circle" size={20} color="#27AE60" />
+          <Text style={styles.featureCheck}>✓</Text>
           <Text style={styles.featureText}>Digital study abroad brochure</Text>
         </View>
         
         <View style={styles.featureItem}>
-          <Ionicons name="checkmark-circle" size={20} color="#27AE60" />
+          <Text style={styles.featureCheck}>✓</Text>
           <Text style={styles.featureText}>Priority counselor support</Text>
         </View>
         
         <View style={styles.featureItem}>
-          <Ionicons name="checkmark-circle" size={20} color="#27AE60" />
+          <Text style={styles.featureCheck}>✓</Text>
           <Text style={styles.featureText}>Document upload capability</Text>
         </View>
         
         <View style={styles.featureItem}>
-          <Ionicons name="checkmark-circle" size={20} color="#27AE60" />
+          <Text style={styles.featureCheck}>✓</Text>
           <Text style={styles.featureText}>Real-time application tracking</Text>
         </View>
       </View>
@@ -140,7 +130,7 @@ const ApplicationLockScreen = ({ navigation }) => {
       <View style={styles.priceContainer}>
         <Text style={styles.priceLabel}>One-Time Fee</Text>
         <Text style={styles.price}>$10.00</Text>
-        <Text style={styles.priceNote}>Secure payment • Instant access</Text>
+        <Text style={styles.priceNote}>Secure payment · Instant access</Text>
       </View>
 
       {/* Payment Methods */}
@@ -155,14 +145,14 @@ const ApplicationLockScreen = ({ navigation }) => {
           onPress={() => setSelectedPaymentMethod('mobile_money')}
         >
           <View style={styles.paymentMethodLeft}>
-            <Ionicons name="phone-portrait-outline" size={24} color="#1E3A5F" />
+            <Text style={styles.paymentIcon}>📱</Text>
             <View style={styles.paymentMethodText}>
               <Text style={styles.paymentMethodName}>Mobile Money</Text>
-              <Text style={styles.paymentMethodDesc}>Lonestar MTN • Orange Money</Text>
+              <Text style={styles.paymentMethodDesc}>Lonestar MTN · Orange Money</Text>
             </View>
           </View>
           {selectedPaymentMethod === 'mobile_money' && (
-            <Ionicons name="checkmark-circle" size={24} color="#1E3A5F" />
+            <Text style={styles.selectedCheck}>✓</Text>
           )}
         </TouchableOpacity>
 
@@ -174,32 +164,16 @@ const ApplicationLockScreen = ({ navigation }) => {
           onPress={() => setSelectedPaymentMethod('card')}
         >
           <View style={styles.paymentMethodLeft}>
-            <Ionicons name="card-outline" size={24} color="#1E3A5F" />
+            <Text style={styles.paymentIcon}>💳</Text>
             <View style={styles.paymentMethodText}>
               <Text style={styles.paymentMethodName}>Credit / Debit Card</Text>
-              <Text style={styles.paymentMethodDesc}>Visa • Mastercard • Verve</Text>
+              <Text style={styles.paymentMethodDesc}>Visa · Mastercard · Verve</Text>
             </View>
           </View>
           {selectedPaymentMethod === 'card' && (
-            <Ionicons name="checkmark-circle" size={24} color="#1E3A5F" />
+            <Text style={styles.selectedCheck}>✓</Text>
           )}
         </TouchableOpacity>
-      </View>
-
-      {/* Trust Badges */}
-      <View style={styles.trustContainer}>
-        <View style={styles.trustItem}>
-          <Ionicons name="shield-checkmark" size={16} color="#27AE60" />
-          <Text style={styles.trustText}>Secure Payment</Text>
-        </View>
-        <View style={styles.trustItem}>
-          <Ionicons name="refresh" size={16} color="#27AE60" />
-          <Text style={styles.trustText}>Money-Back Guarantee</Text>
-        </View>
-        <View style={styles.trustItem}>
-          <Ionicons name="headset" size={16} color="#27AE60" />
-          <Text style={styles.trustText}>24/7 Support</Text>
-        </View>
       </View>
 
       {/* Pay Button */}
@@ -211,10 +185,7 @@ const ApplicationLockScreen = ({ navigation }) => {
         {loading ? (
           <ActivityIndicator color="#FFFFFF" />
         ) : (
-          <>
-            <Text style={styles.payButtonText}>Pay $10 to Continue</Text>
-            <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
-          </>
+          <Text style={styles.payButtonText}>Pay $10 to Continue</Text>
         )}
       </TouchableOpacity>
 
@@ -230,7 +201,7 @@ const ApplicationLockScreen = ({ navigation }) => {
         style={styles.supportLink}
         onPress={() => navigation.navigate('Chat')}
       >
-        <Ionicons name="chatbubble-outline" size={16} color="#5A7D9C" />
+        <Text style={styles.supportIcon}>💬</Text>
         <Text style={styles.supportText}>Need help? Talk to an advisor</Text>
       </TouchableOpacity>
     </ScrollView>
@@ -238,196 +209,53 @@ const ApplicationLockScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  content: {
-    paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 40,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#5A7D9C',
-  },
-  backButton: {
-    marginBottom: 20,
-  },
-  lockIconContainer: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  lockIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#1E3A5F',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#1E3A5F',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: '#5A7D9C',
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 28,
-  },
-  featuresContainer: {
-    backgroundColor: '#F5F9FF',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#E8EEF5',
-  },
-  featuresTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E3A5F',
-    marginBottom: 16,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  featureText: {
-    fontSize: 14,
-    color: '#1E3A5F',
-    marginLeft: 12,
-  },
-  priceContainer: {
-    alignItems: 'center',
-    marginBottom: 28,
-  },
-  priceLabel: {
-    fontSize: 14,
-    color: '#5A7D9C',
-    marginBottom: 4,
-  },
-  price: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: '#1E3A5F',
-  },
-  priceNote: {
-    fontSize: 12,
-    color: '#8AA0B8',
-    marginTop: 4,
-  },
-  paymentMethodsContainer: {
-    marginBottom: 20,
-  },
-  paymentMethodsTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1E3A5F',
-    marginBottom: 12,
-  },
+  container: { flex: 1, backgroundColor: '#ffffff' },
+  content: { paddingHorizontal: 24, paddingTop: 60, paddingBottom: 40 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' },
+  loadingText: { marginTop: 12, fontSize: 14, color: '#888888' },
+  backButton: { marginBottom: 20 },
+  backArrow: { fontSize: 24, color: '#1a3a5c' },
+  lockIconContainer: { alignItems: 'center', marginBottom: 24 },
+  lockIcon: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#1a3a5c', justifyContent: 'center', alignItems: 'center' },
+  lockEmoji: { fontSize: 36 },
+  title: { fontSize: 26, fontWeight: 'bold', color: '#1a3a5c', textAlign: 'center', marginBottom: 12 },
+  subtitle: { fontSize: 15, color: '#888888', textAlign: 'center', lineHeight: 22, marginBottom: 28 },
+  featuresContainer: { backgroundColor: '#f8fafc', borderRadius: 16, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#e8eef5' },
+  featuresTitle: { fontSize: 16, fontWeight: '600', color: '#1a3a5c', marginBottom: 16 },
+  featureItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  featureCheck: { fontSize: 16, color: '#27AE60', fontWeight: 'bold', marginRight: 12, width: 20 },
+  featureText: { fontSize: 14, color: '#1a3a5c' },
+  priceContainer: { alignItems: 'center', marginBottom: 28 },
+  priceLabel: { fontSize: 14, color: '#888888', marginBottom: 4 },
+  price: { fontSize: 48, fontWeight: 'bold', color: '#1a3a5c' },
+  priceNote: { fontSize: 12, color: '#aaaaaa', marginTop: 4 },
+  paymentMethodsContainer: { marginBottom: 20 },
+  paymentMethodsTitle: { fontSize: 15, fontWeight: '600', color: '#1a3a5c', marginBottom: 12 },
   paymentMethod: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1.5,
-    borderColor: '#D0DDE9',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    backgroundColor: '#FAFCFE',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderWidth: 1.5, borderColor: '#e0e0e0', borderRadius: 12, padding: 16,
+    marginBottom: 12, backgroundColor: '#fafcfe',
   },
-  paymentMethodSelected: {
-    borderColor: '#1E3A5F',
-    backgroundColor: '#F5F9FF',
-  },
-  paymentMethodLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  paymentMethodText: {
-    marginLeft: 14,
-  },
-  paymentMethodName: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#1E3A5F',
-  },
-  paymentMethodDesc: {
-    fontSize: 12,
-    color: '#8AA0B8',
-    marginTop: 2,
-  },
-  trustContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 24,
-  },
-  trustItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  trustText: {
-    fontSize: 12,
-    color: '#5A7D9C',
-    marginLeft: 6,
-  },
+  paymentMethodSelected: { borderColor: '#1a3a5c', backgroundColor: '#f5f9ff' },
+  paymentMethodLeft: { flexDirection: 'row', alignItems: 'center' },
+  paymentIcon: { fontSize: 24, marginRight: 14 },
+  paymentMethodText: {},
+  paymentMethodName: { fontSize: 15, fontWeight: '500', color: '#1a3a5c' },
+  paymentMethodDesc: { fontSize: 12, color: '#aaaaaa', marginTop: 2 },
+  selectedCheck: { fontSize: 20, color: '#1a3a5c', fontWeight: 'bold' },
   payButton: {
-    backgroundColor: '#1E3A5F',
-    borderRadius: 12,
-    height: 56,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-    shadowColor: '#1E3A5F',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    backgroundColor: '#cc2936', borderRadius: 12, height: 56,
+    justifyContent: 'center', alignItems: 'center', marginBottom: 16,
+    shadowColor: '#cc2936', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
   },
-  payButtonDisabled: {
-    opacity: 0.7,
-  },
-  payButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-    marginRight: 8,
-  },
-  termsText: {
-    fontSize: 12,
-    color: '#8AA0B8',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  termsLink: {
-    color: '#1E3A5F',
-    fontWeight: '500',
-  },
-  supportLink: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  supportText: {
-    fontSize: 14,
-    color: '#5A7D9C',
-    marginLeft: 6,
-  },
+  payButtonDisabled: { opacity: 0.7 },
+  payButtonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
+  termsText: { fontSize: 12, color: '#aaaaaa', textAlign: 'center', marginBottom: 16 },
+  termsLink: { color: '#1a3a5c', fontWeight: '500' },
+  supportLink: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+  supportIcon: { fontSize: 16, marginRight: 6 },
+  supportText: { fontSize: 14, color: '#888888' },
 });
 
 export default ApplicationLockScreen;
