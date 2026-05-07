@@ -9,14 +9,15 @@ import api from '../../services/api';
 const ProfileScreen = ({ navigation }) => {
   const [user, setUser] = useState(null);
 
-  useEffect(() => { loadUserProfile(); }, []);
-
-  const loadUserProfile = async () => {
-    try {
-      const response = await api.get('/profile');
-      if (response.data.success) setUser(response.data.user);
-    } catch (error) {}
-  };
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await api.get('/profile');
+        if (res.data?.success) setUser(res.data.user);
+      } catch (error) {}
+    };
+    load();
+  }, []);
 
   const handleLogout = () => {
     Alert.alert('Log Out', 'Are you sure?', [
@@ -28,96 +29,89 @@ const ProfileScreen = ({ navigation }) => {
     ]);
   };
 
-  if (!user) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.loadingText}>Loading...</Text>
-      </View>
-    );
-  }
+  if (!user) return <View style={styles.container}><Text style={styles.loading}>Loading...</Text></View>;
 
   return (
     <View style={styles.container}>
-      {/* Profile Header */}
+      {/* Red Header Block */}
       <View style={styles.profileHeader}>
-        <View style={styles.profileTop}>
-          <View style={styles.profileAvatar}>
-            <Text style={styles.avatarText}>{user.fullName?.charAt(0)?.toUpperCase() || 'S'}</Text>
+        <View style={styles.headerRow}>
+          <View style={styles.avatarLarge}>
+            <Text style={styles.avatarLargeText}>{user.fullName?.charAt(0)?.toUpperCase() || 'S'}</Text>
           </View>
-          <View style={styles.profileInfo}>
+          <View style={styles.headerInfo}>
             <Text style={styles.userName}>{user.fullName}</Text>
-            <Text style={styles.userLocation}>Liberia</Text>
-            {user.profile?.preferredCountry && (
-              <View style={styles.goalBadge}>
-                <Text style={styles.goalText}>
-                  {user.profile.studyLevel || 'Undergraduate'} in {user.profile.courseOfStudy || 'Business'} — {user.profile.preferredCountry}
-                </Text>
-              </View>
-            )}
+            <Text style={styles.userId}>ID: {user._id?.slice(-8).toUpperCase() || 'GISCUSER'}</Text>
+            <Text style={styles.userLocation}>{user.country || 'Liberia'}</Text>
           </View>
-        </View>
-
-        {/* Counselor Card */}
-        <View style={styles.counselorCard}>
-          <View style={styles.counselorLeft}>
-            <View style={styles.counselorAvatar}>
-              <Text style={styles.counselorAvatarText}>F</Text>
-            </View>
-            <View>
-              <Text style={styles.counselorName}>Faith Isikwei</Text>
-              <Text style={styles.counselorRole}>Senior Counsellor</Text>
-            </View>
-          </View>
-          <TouchableOpacity style={styles.bookSessionBtn} onPress={() => navigation.navigate('Meet')}>
-            <Text style={styles.bookSessionText}>Book Session</Text>
-          </TouchableOpacity>
         </View>
       </View>
 
-      {/* Menu */}
-      <ScrollView style={styles.menuSection}>
+      {/* Alert Banner */}
+      <View style={styles.alertBanner}>
+        <Text style={styles.alertText}>Complete your profile to get better recommendations</Text>
+        <TouchableOpacity style={styles.verifyButton}>
+          <Text style={styles.verifyButtonText}>Complete</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Navigation List */}
+      <ScrollView style={styles.menuList}>
         <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('DocumentUpload')}>
-          <Text style={styles.menuIcon}>📄</Text>
-          <Text style={styles.menuText}>Documents</Text>
-          <Text style={styles.menuArrow}>›</Text>
+          <View style={[styles.menuIcon, { backgroundColor: '#EBF3FA' }]}>
+            <Text style={styles.menuIconText}>📄</Text>
+          </View>
+          <Text style={styles.menuLabel}>Documents</Text>
+          <View style={styles.menuRight}>
+            <Text style={[styles.menuStatus, { color: '#3b82f6' }]}>Upload</Text>
+            <Text style={styles.menuArrow}>›</Text>
+          </View>
         </TouchableOpacity>
+
         <TouchableOpacity style={styles.menuItem}>
-          <Text style={styles.menuIcon}>⭐</Text>
-          <Text style={styles.menuText}>Shortlist</Text>
+          <View style={[styles.menuIcon, { backgroundColor: '#E8F8E8' }]}>
+            <Text style={styles.menuIconText}>🎓</Text>
+          </View>
+          <Text style={styles.menuLabel}>Education History</Text>
           <Text style={styles.menuArrow}>›</Text>
         </TouchableOpacity>
+
         <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('ApplicationTracker')}>
-          <Text style={styles.menuIcon}>📋</Text>
-          <Text style={styles.menuText}>Application Tracker</Text>
+          <View style={[styles.menuIcon, { backgroundColor: '#FFF3E0' }]}>
+            <Text style={styles.menuIconText}>📋</Text>
+          </View>
+          <Text style={styles.menuLabel}>Application Tracker</Text>
           <Text style={styles.menuArrow}>›</Text>
         </TouchableOpacity>
+
         <TouchableOpacity style={styles.menuItem}>
-          <Text style={styles.menuIcon}>💰</Text>
-          <Text style={styles.menuText}>Refer a Friend</Text>
+          <View style={[styles.menuIcon, { backgroundColor: '#F3E5F5' }]}>
+            <Text style={styles.menuIconText}>💰</Text>
+          </View>
+          <Text style={styles.menuLabel}>Refer a Friend</Text>
           <Text style={styles.menuArrow}>›</Text>
         </TouchableOpacity>
+
         <TouchableOpacity style={styles.menuItem}>
-          <Text style={styles.menuIcon}>⚙️</Text>
-          <Text style={styles.menuText}>Settings</Text>
+          <View style={[styles.menuIcon, { backgroundColor: '#f5f5f5' }]}>
+            <Text style={styles.menuIconText}>⚙️</Text>
+          </View>
+          <Text style={styles.menuLabel}>Settings</Text>
           <Text style={styles.menuArrow}>›</Text>
         </TouchableOpacity>
+
         <TouchableOpacity style={styles.menuItem}>
-          <Text style={styles.menuIcon}>📝</Text>
-          <Text style={styles.menuText}>Terms of Service</Text>
-          <Text style={styles.menuArrow}>›</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.menuItem}>
-          <Text style={styles.menuIcon}>🔒</Text>
-          <Text style={styles.menuText}>Privacy Policy</Text>
+          <View style={[styles.menuIcon, { backgroundColor: '#f5f5f5' }]}>
+            <Text style={styles.menuIconText}>📝</Text>
+          </View>
+          <Text style={styles.menuLabel}>Terms of Service</Text>
           <Text style={styles.menuArrow}>›</Text>
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Logout */}
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.logoutText}>Log Out</Text>
       </TouchableOpacity>
-
       <Text style={styles.version}>Version 1.0.0</Text>
     </View>
   );
@@ -125,28 +119,26 @@ const ProfileScreen = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#ffffff' },
-  loadingText: { textAlign: 'center', marginTop: 100, fontSize: 16, color: '#888' },
-  profileHeader: { backgroundColor: '#1a3a5c', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 24, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
-  profileTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  profileAvatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#cc2936', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
-  avatarText: { fontSize: 24, fontWeight: 'bold', color: '#ffffff' },
-  profileInfo: { flex: 1 },
+  loading: { textAlign: 'center', marginTop: 100, fontSize: 16, color: '#888' },
+  profileHeader: { backgroundColor: '#cc2936', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 28, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
+  headerRow: { flexDirection: 'row', alignItems: 'center' },
+  avatarLarge: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#ffffff', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+  avatarLargeText: { fontSize: 26, fontWeight: 'bold', color: '#cc2936' },
+  headerInfo: { flex: 1 },
   userName: { fontSize: 22, fontWeight: 'bold', color: '#ffffff', marginBottom: 2 },
-  userLocation: { fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 8 },
-  goalBadge: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start' },
-  goalText: { fontSize: 11, color: '#ffffff' },
-  counselorCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 14, padding: 14 },
-  counselorLeft: { flexDirection: 'row', alignItems: 'center' },
-  counselorAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#1a3a5c', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  counselorAvatarText: { fontSize: 18, fontWeight: 'bold', color: '#ffffff' },
-  counselorName: { fontSize: 15, fontWeight: '600', color: '#1a3a5c' },
-  counselorRole: { fontSize: 12, color: '#888888' },
-  bookSessionBtn: { backgroundColor: '#cc2936', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
-  bookSessionText: { color: '#ffffff', fontSize: 12, fontWeight: '600' },
-  menuSection: { flex: 1, paddingTop: 8 },
+  userId: { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginBottom: 4 },
+  userLocation: { fontSize: 13, color: 'rgba(255,255,255,0.8)' },
+  alertBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFF5F5', borderRadius: 12, padding: 14, marginHorizontal: 20, marginTop: -14, marginBottom: 8, borderWidth: 1, borderColor: '#FFD5D5' },
+  alertText: { flex: 1, fontSize: 12, color: '#cc2936', marginRight: 10 },
+  verifyButton: { backgroundColor: '#3b82f6', borderRadius: 6, paddingVertical: 6, paddingHorizontal: 14 },
+  verifyButtonText: { color: '#ffffff', fontSize: 12, fontWeight: '600' },
+  menuList: { flex: 1, paddingTop: 8 },
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
-  menuIcon: { fontSize: 18, marginRight: 14 },
-  menuText: { flex: 1, fontSize: 15, color: '#1a3a5c' },
+  menuIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
+  menuIconText: { fontSize: 18 },
+  menuLabel: { flex: 1, fontSize: 15, color: '#1a1a2e', fontWeight: '500' },
+  menuRight: { flexDirection: 'row', alignItems: 'center' },
+  menuStatus: { fontSize: 12, fontWeight: '500', marginRight: 8 },
   menuArrow: { fontSize: 22, color: '#cccccc' },
   logoutButton: { marginHorizontal: 20, marginTop: 10, paddingVertical: 14, alignItems: 'center' },
   logoutText: { fontSize: 15, color: '#cc2936', fontWeight: '500' },
